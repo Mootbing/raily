@@ -20,6 +20,55 @@ const FONTS = {
   family: 'System',
 };
 
+// Helper: parse a 12-hour time string (e.g., "3:45 PM") to a Date on baseDate
+function parseTimeToDate(timeStr: string, baseDate: Date): Date {
+  const [time, meridian] = timeStr.split(' ');
+  const [hStr, mStr] = time.split(':');
+  let hours = parseInt(hStr, 10);
+  const minutes = parseInt(mStr, 10);
+  const isPM = (meridian || '').toUpperCase() === 'PM';
+  if (isPM && hours !== 12) hours += 12;
+  if (!isPM && hours === 12) hours = 0;
+  const d = new Date(baseDate);
+  d.setHours(hours, minutes, 0, 0);
+  return d;
+}
+
+// Helper: get countdown value and unit for train departure
+function getCountdownForTrain(train: Train): { value: number; unit: 'DAYS' | 'HOURS' | 'MINUTES' | 'SECONDS'; past: boolean } {
+  // If we know it's more than a day away, keep DAYS granularity
+  if (train.daysAway && train.daysAway > 0) {
+    return { value: Math.round(train.daysAway), unit: 'DAYS', past: false };
+  }
+  const now = new Date();
+  // Base on today by default; a future enhancement could infer actual date
+  const baseDate = new Date(now);
+  const departDate = parseTimeToDate(train.departTime, baseDate);
+  let deltaSec = (departDate.getTime() - now.getTime()) / 1000;
+  const past = deltaSec < 0;
+  const absSec = Math.abs(deltaSec);
+
+  // Choose the most appropriate unit, rounding to nearest whole number
+  let hours = Math.round(absSec / 3600);
+  if (hours >= 1) {
+    return { value: hours, unit: 'HOURS', past };
+  }
+  let minutes = Math.round(absSec / 60);
+  if (minutes >= 60) {
+    // Escalate to 1 hour if rounding pushes to 60
+    return { value: 1, unit: 'HOURS', past };
+  }
+  if (minutes >= 1) {
+    return { value: minutes, unit: 'MINUTES', past };
+  }
+  let seconds = Math.round(absSec);
+  if (seconds >= 60) {
+    // Escalate to 1 minute if rounding pushes to 60
+    return { value: 1, unit: 'MINUTES', past };
+  }
+  return { value: seconds, unit: 'SECONDS', past };
+}
+
 // Search Results Component
 function SearchResults({ 
   query, 
@@ -85,7 +134,7 @@ function SearchResults({
 }
 
 function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void }) {
-  const { isFullscreen, scrollOffset, panGesture, snapToPoint } = useContext(SlideUpModalContext);
+  const { isFullscreen, isCollapsed, scrollOffset, panGesture, snapToPoint } = useContext(SlideUpModalContext);
   const [imageError, setImageError] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -151,6 +200,14 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
     loadFrequentlyUsed();
   }, []);
 
+  // Exit search mode when modal is collapsed
+  useEffect(() => {
+    if (isCollapsed && isSearchFocused) {
+      setIsSearchFocused(false);
+      setSearchQuery('');
+    }
+  }, [isCollapsed, isSearchFocused]);
+
   return (
     <GestureDetector gesture={panGesture}>
       <ScrollView 
@@ -163,33 +220,30 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
         scrollEventThrottle={16}
       >
         <View>
-          <Text style={styles.title}>{isSearchFocused ? 'Add Train' : 'My Trains'}</Text>
+          <Text style={[styles.title, isCollapsed && styles.titleCollapsed]}>{isSearchFocused ? 'Add Train' : 'My Trains'}</Text>
           {isSearchFocused && (
             <Text style={styles.subtitle}>Add any amtrak train (for now)</Text>
           )}
           
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color="#888" />
-            <TextInput
-              ref={searchInputRef}
-              style={styles.searchInput}
-              placeholder={isSearchFocused ? "Northeast Regional, BOS, or NER123" : "Search to add trains"}
-              placeholderTextColor={COLORS.secondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onFocus={() => {
-                setIsSearchFocused(true);
-                // Snap to fullscreen after a short delay to keep focus
-                setTimeout(() => {
-                  snapToPoint?.('max');
-                }, 50);
-              }}
-              onBlur={() => setIsSearchFocused(false)}
-              accessible={true}
-              accessibilityLabel="Search for trains or stations"
-              accessibilityHint="Enter train name, station name, or route to search"
-            />
-            {isSearchFocused && (
+          {isSearchFocused ? (
+            <View style={[styles.searchContainer, isCollapsed && styles.searchContainerCollapsed]}>
+              <Ionicons name="search" size={20} color="#888" />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder={"Northeast Regional, BOS, or NER123"}
+                placeholderTextColor={COLORS.secondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onBlur={() => {
+                  setIsSearchFocused(false);
+                  snapToPoint?.('half');
+                }}
+                accessible={true}
+                accessibilityLabel="Search for trains or stations"
+                accessibilityHint="Enter train name, station name, or route to search"
+                autoFocus
+              />
               <TouchableOpacity 
                 onPress={() => {
                   setIsSearchFocused(false);
@@ -202,10 +256,29 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
               >
                 <Ionicons name="close-circle" size={20} color="#888" />
               </TouchableOpacity>
-            )}
-          </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.searchContainer, isCollapsed && styles.searchContainerCollapsed]}
+              activeOpacity={0.7}
+              onPress={() => {
+                setIsSearchFocused(true);
+                snapToPoint?.('max');
+                setTimeout(() => {
+                  searchInputRef.current?.focus();
+                }, 50);
+              }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Search to add trains"
+              accessibilityHint="Tap to start searching"
+            >
+              <Ionicons name="search" size={20} color="#888" />
+              <Text style={styles.searchButtonText}>Search to add trains</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        {isSearchFocused && (
+        {isSearchFocused && !isCollapsed && (
           <View style={styles.frequentlyUsedSection}>
             <Text style={styles.sectionLabel}>
               {searchQuery ? 'SEARCH RESULTS' : 'FREQUENTLY USED'}
@@ -269,14 +342,17 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
             )}
           </View>
         )}
-        {!isSearchFocused && (
+        {!isSearchFocused && !isCollapsed && (
           flights.length === 0 ? (
             <View style={styles.noTrainsContainer}>
               <Ionicons name="train" size={48} color={COLORS.secondary} />
               <Text style={styles.noTrainsText}>no trains yet...</Text>
             </View>
           ) : (
-            flights.map((flight, index) => (
+            flights.map((flight, index) => {
+              const countdown = getCountdownForTrain(flight);
+              const unitLabel = `${countdown.unit}${countdown.past ? ' AGO' : ''}`;
+              return (
               <TouchableOpacity 
                 key={flight.id} 
                 style={styles.flightCard}
@@ -287,11 +363,11 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
                 accessible={true}
                 accessibilityRole="button"
                 accessibilityLabel={`Train ${flight.flightNumber} from ${flight.from} to ${flight.to}`}
-                accessibilityHint={`Departs at ${flight.departTime}, arrives at ${flight.arriveTime}. Tap to view details`}
+                accessibilityHint={`Departs at ${flight.departTime} (${countdown.value} ${countdown.unit.toLowerCase()} ${countdown.past ? 'ago' : 'from now'}), arrives at ${flight.arriveTime}. Tap to view details`}
               >
                 <View style={styles.flightLeft}>
-                  <Text style={styles.daysAway}>{flight.daysAway}</Text>
-                  <Text style={styles.daysLabel}>DAYS</Text>
+                  <Text style={styles.daysAway}>{countdown.value}</Text>
+                  <Text style={styles.daysLabel}>{unitLabel}</Text>
                 </View>
                 
                 <View style={styles.flightCenter}>
@@ -333,7 +409,8 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
                   </View>
                 </View>
               </TouchableOpacity>
-            ))
+            );
+            })
           )
         )}
       </ScrollView>
@@ -431,6 +508,9 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     marginBottom: Spacing.md,
   },
+  titleCollapsed: {
+    marginBottom: Spacing.sm,
+  },
   subtitle: {
     fontSize: FontSizes.flightDate,
     fontFamily: FONTS.family,
@@ -447,6 +527,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
     borderWidth: 1,
     borderColor: COLORS.border.secondary,
+  },
+  searchContainerCollapsed: {
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.sm,
   },
   searchInput: {
     flex: 1,
@@ -476,6 +560,14 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
     borderWidth: 1,
     borderColor: COLORS.border.primary,
+  },
+  searchButtonText: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    color: COLORS.secondary,
+    fontSize: FontSizes.searchLabel,
+    fontFamily: FONTS.family,
   },
   frequentlyUsedIcon: {
     width: 40,

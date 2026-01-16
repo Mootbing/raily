@@ -55,7 +55,7 @@ const calculateDuration = (startTime: string, endTime: string): string => {
 };
 
 export default function TrainDetailModal({ train, onClose }: TrainDetailModalProps) {
-  const { panGesture, isFullscreen, scrollOffset } = useContext(SlideUpModalContext);
+  const { panGesture, isFullscreen, isCollapsed, scrollOffset } = useContext(SlideUpModalContext);
   
   // Calculate journey duration from departure to arrival
   const duration = calculateDuration(train.departTime, train.arriveTime);
@@ -75,7 +75,7 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
         scrollEventThrottle={16}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, isCollapsed && styles.headerCollapsed]}>
           <View style={styles.headerContent}>
             <Image
               source={require('../../assets/images/amtrak.png')}
@@ -98,64 +98,67 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
           </View>
         </View>
 
-        {/* Departs in */}
-        <View style={styles.departsSection}>
-          <Text style={styles.departsText}>Departs in {train.daysAway} days</Text>
-        </View>
-        <View style={styles.fullWidthLine} />
-
-        {/* Departure Info */}
-        <View style={styles.infoSection}>
-          <View style={styles.infoHeader}>
-            <MaterialCommunityIcons name="arrow-top-right" size={16} color={COLORS.primary} />
-            <Text style={styles.locationCode}>{train.fromCode}</Text>
-            <Text style={styles.locationName}> • {train.from} Intl.</Text>
-          </View>
-          <Text style={styles.timeText}>{train.departTime}</Text>
-          <View style={styles.durationLineRow}>
-            <View style={styles.durationContent}>
-              <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} />
-              <Text style={styles.durationText}>{duration}</Text>
-              {/* TODO: Fix mileage calculation */}
-              {/* <Text style={styles.durationText}>{duration} • {estimatedMiles} mi</Text> */}
+        {/* Collapsed: only header visible */}
+        {!isCollapsed && (
+          <>
+            {/* Departs in */}
+            <View style={styles.departsSection}>
+              <Text style={styles.departsText}>Departs in {train.daysAway} days</Text>
             </View>
-            <View style={styles.horizontalLine} />
-          </View>
-        </View>
+            <View style={styles.fullWidthLine} />
 
-        {/* Intermediate Stops with Timeline */}
-        {train.intermediateStops && train.intermediateStops.length > 0 && (
-          <View style={styles.timelineContainer}>
-            <View style={styles.dashedLineWrapper}>
-              <View style={styles.dashedLine} />
-            </View>
-            
-            {train.intermediateStops.map((stop, index) => (
-              <View key={index} style={styles.stopSection}>
-                <Text style={styles.stopTime}>{stop.time}</Text>
-                <Text style={styles.stopStation}>{stop.name}</Text>
-                <Text style={styles.stopCode}>{stop.code}</Text>
+            {/* Departure Info */}
+            <View style={styles.infoSection}>
+              <View style={styles.infoHeader}>
+                <MaterialCommunityIcons name="arrow-top-right" size={16} color={COLORS.primary} />
+                <Text style={styles.locationCode}>{train.fromCode}</Text>
+                <Text style={styles.locationName}> • {train.from} Intl.</Text>
               </View>
-            ))}
-
-            <View style={styles.endLineRow}>
-              <View style={styles.horizontalLine} />
+              <Text style={styles.timeText}>{train.departTime}</Text>
+              <View style={styles.durationLineRow}>
+                <View style={styles.durationContent}>
+                  <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} />
+                  <Text style={styles.durationText}>{duration}</Text>
+                </View>
+                <View style={styles.horizontalLine} />
+              </View>
             </View>
-          </View>
-        )}
 
-        {/* Arrival Info */}
-        <View style={styles.infoSection}>
-          <View style={styles.infoHeader}>
-            <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={COLORS.primary} />
-            <Text style={styles.locationCode}>{train.toCode}</Text>
-            <Text style={styles.locationName}> • {train.to} Intl.</Text>
-          </View>
-          <Text style={styles.timeText}>
-            {train.arriveTime}
-            {train.arriveNext ? ' +1' : ''}
-          </Text>
-        </View>
+            {/* Intermediate Stops with Timeline */}
+            {train.intermediateStops && train.intermediateStops.length > 0 && (
+              <View style={styles.timelineContainer}>
+                <View style={styles.dashedLineWrapper}>
+                  <View style={styles.dashedLine} />
+                </View>
+                
+                {train.intermediateStops.map((stop, index) => (
+                  <View key={index} style={styles.stopSection}>
+                    <Text style={styles.stopTime}>{stop.time}</Text>
+                    <Text style={styles.stopStation}>{stop.name}</Text>
+                    <Text style={styles.stopCode}>{stop.code}</Text>
+                  </View>
+                ))}
+
+                <View style={styles.endLineRow}>
+                  <View style={styles.horizontalLine} />
+                </View>
+              </View>
+            )}
+
+            {/* Arrival Info */}
+            <View style={styles.infoSection}>
+              <View style={styles.infoHeader}>
+                <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={COLORS.primary} />
+                <Text style={styles.locationCode}>{train.toCode}</Text>
+                <Text style={styles.locationName}> • {train.to} Intl.</Text>
+              </View>
+              <Text style={styles.timeText}>
+                {train.arriveTime}
+                {train.arriveNext ? ' +1' : ''}
+              </Text>
+            </View>
+          </>
+        )}
       </ScrollView>
     </GestureDetector>
   );
@@ -184,6 +187,10 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.tertiary,
+  },
+  headerCollapsed: {
+    padding: Spacing.lg,
+    paddingTop: Spacing.md,
   },
   headerContent: {
     flexDirection: 'row',

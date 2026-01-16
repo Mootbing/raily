@@ -13,18 +13,21 @@ import { BorderRadius, Spacing } from '../../constants/theme';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const SNAP_POINTS = {
+  MIN: SCREEN_HEIGHT * 0.15 + 30,
   HALF: SCREEN_HEIGHT * 0.5,
   MAX: SCREEN_HEIGHT * 0.95,
 };
 
 export const SlideUpModalContext = createContext<{
   isFullscreen: boolean;
+  isCollapsed: boolean;
   scrollOffset: any;
   panGesture: any;
   modalHeight: any;
-  snapToPoint?: (point: 'half' | 'max') => void;
+  snapToPoint?: (point: 'min' | 'half' | 'max') => void;
 }>({
   isFullscreen: false,
+  isCollapsed: false,
   scrollOffset: { value: 0 } as any,
   panGesture: null,
   modalHeight: { value: SCREEN_HEIGHT * 0.5 } as any,
@@ -32,19 +35,20 @@ export const SlideUpModalContext = createContext<{
 
 interface SlideUpModalProps {
   children: React.ReactNode;
-  onSnapChange?: (snapPoint: 'half' | 'max') => void;
+  onSnapChange?: (snapPoint: 'min' | 'half' | 'max') => void;
   onHeightChange?: (height: number) => void;
   onDismiss?: () => void;
 }
 
-export default React.forwardRef<{ snapToPoint: (point: 'half' | 'max') => void }, SlideUpModalProps>(
+export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') => void }, SlideUpModalProps>(
   function SlideUpModal({ children, onSnapChange, onHeightChange, onDismiss }: SlideUpModalProps, ref: React.Ref<any>) {
   const translateY = useSharedValue(SCREEN_HEIGHT - SNAP_POINTS.HALF);
   const context = useSharedValue({ y: 0 });
-  const currentSnap = useSharedValue<'half' | 'max'>('half');
+  const currentSnap = useSharedValue<'min' | 'half' | 'max'>('half');
   const scrollOffset = useSharedValue(0);
   const modalHeight = useSharedValue(SNAP_POINTS.HALF);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   React.useImperativeHandle(ref, () => ({
     snapToPoint,
@@ -64,6 +68,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'half' | 'max') => void }
     
     // Calculate distances to each snap point
     const distances = [
+      { point: SNAP_POINTS.MIN, distance: Math.abs(modalHeightValue - SNAP_POINTS.MIN), key: 'min' as const },
       { point: SNAP_POINTS.HALF, distance: Math.abs(modalHeightValue - SNAP_POINTS.HALF), key: 'half' as const },
       { point: SNAP_POINTS.MAX, distance: Math.abs(modalHeightValue - SNAP_POINTS.MAX), key: 'max' as const },
     ];
@@ -85,12 +90,13 @@ export default React.forwardRef<{ snapToPoint: (point: 'half' | 'max') => void }
     }
     
     runOnJS(setIsFullscreen)(closest.key === 'max');
+    runOnJS(setIsCollapsed)(closest.key === 'min');
     
     return SCREEN_HEIGHT - closest.point;
   };
 
-  const snapToPoint = (point: 'half' | 'max') => {
-    const snapPoint = point === 'half' ? SNAP_POINTS.HALF : SNAP_POINTS.MAX;
+  const snapToPoint = (point: 'min' | 'half' | 'max') => {
+    const snapPoint = point === 'min' ? SNAP_POINTS.MIN : point === 'half' ? SNAP_POINTS.HALF : SNAP_POINTS.MAX;
     const targetY = SCREEN_HEIGHT - snapPoint;
     
     currentSnap.value = point;
@@ -105,6 +111,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'half' | 'max') => void }
     }
     
     runOnJS(setIsFullscreen)(point === 'max');
+    runOnJS(setIsCollapsed)(point === 'min');
     
     translateY.value = withSpring(targetY, {
       damping: 50,
@@ -117,30 +124,37 @@ export default React.forwardRef<{ snapToPoint: (point: 'half' | 'max') => void }
       context.value = { y: translateY.value };
     })
     .onUpdate((event) => {
-      // Only prevent pan when scrollview is scrolled down AND trying to scroll up
-      // Allow pan when at top of scroll (scrollOffset === 0)
-      if (currentSnap.value === 'max' && scrollOffset.value > 0 && event.translationY < 0) {
-        // Don't allow dragging up if scrolled down - let scrollview handle it
+      // When content is scrolled, let ScrollView handle gestures until at top
+      if (currentSnap.value === 'max' && scrollOffset.value > 0) {
         return;
       }
       // Limit dragging within bounds
       const newY = context.value.y + event.translationY;
       translateY.value = Math.max(
         SCREEN_HEIGHT - SNAP_POINTS.MAX,
-        Math.min(SCREEN_HEIGHT - SNAP_POINTS.HALF, newY)
+        Math.min(SCREEN_HEIGHT - SNAP_POINTS.MIN, newY)
       );
     })
-    .onEnd(() => {
-      // Auto-resize to 50% if scrolling down at top with velocity threshold
-      if (currentSnap.value === 'max' && scrollOffset.value < 150) {
-        const snapPoint = SCREEN_HEIGHT - SNAP_POINTS.HALF;
-        translateY.value = withSpring(snapPoint, {
+    .onEnd((event) => {
+      // If at top of scroll and the user dragged down, collapse to MIN
+      const atTop = scrollOffset.value <= 10;
+      const draggedDown = (event?.translationY ?? 0) > 30 || (event?.velocityY ?? 0) > 800;
+      if (atTop && draggedDown) {
+        const targetY = SCREEN_HEIGHT - SNAP_POINTS.MIN;
+        currentSnap.value = 'min';
+        modalHeight.value = SNAP_POINTS.MIN;
+        runOnJS(setIsFullscreen)(false);
+        runOnJS(setIsCollapsed)(true);
+        translateY.value = withSpring(targetY, {
           damping: 50,
           stiffness: 200,
         });
-        currentSnap.value = 'half';
-        modalHeight.value = SNAP_POINTS.HALF;
-        runOnJS(setIsFullscreen)(false);
+        if (onSnapChange) {
+          runOnJS(onSnapChange)('min');
+        }
+        if (onHeightChange) {
+          runOnJS(onHeightChange)(SNAP_POINTS.MIN);
+        }
         return;
       }
       
@@ -159,7 +173,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'half' | 'max') => void }
 
   return (
     <Animated.View style={[styles.container, animatedStyle]}>
-      <SlideUpModalContext.Provider value={{ isFullscreen, scrollOffset, panGesture, modalHeight, snapToPoint }}>
+      <SlideUpModalContext.Provider value={{ isFullscreen, isCollapsed, scrollOffset, panGesture, modalHeight, snapToPoint }}>
         {Platform.OS === 'ios' || Platform.OS === 'android' ? (
           <BlurView intensity={40} style={[
             styles.blurContainer,
