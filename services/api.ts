@@ -4,7 +4,7 @@
  */
 
 import type { EnrichedStopTime, Route, SearchResult, Stop, Train } from '../types/train';
-import { gtfsParser } from '../utils/gtfs-parser-new';
+import { gtfsParser } from '../utils/gtfs-parser';
 
 /**
  * Format 24-hour time to 12-hour AM/PM format
