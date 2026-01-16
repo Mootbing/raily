@@ -45,6 +45,7 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
             <Image
               source={require('../../assets/images/amtrak.png')}
               style={styles.headerLogo}
+              fadeDuration={0}
             />
             <View style={styles.headerTextContainer}>
               <View style={styles.headerTop}>
