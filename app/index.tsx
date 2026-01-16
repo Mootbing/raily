@@ -18,11 +18,9 @@ const FONTS = {
   weight: FontWeights,
 };
 
-function ModalContent() {
+function ModalContent({ onTrainSelect }: { onTrainSelect: (train: any) => void }) {
   const { isFullscreen, scrollOffset, panGesture, isMinimized } = useContext(SlideUpModalContext);
   const [imageError, setImageError] = useState(false);
-  const [selectedTrain, setSelectedTrain] = useState<any>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const flights = [
     {
@@ -90,8 +88,7 @@ function ModalContent() {
             isMinimized && index > 0 && { display: 'none' }
           ]}
           onPress={() => {
-            setSelectedTrain(flight);
-            setShowDetailModal(true);
+            onTrainSelect(flight);
           }}
           activeOpacity={0.7}
         >
@@ -142,18 +139,14 @@ function ModalContent() {
       ))}
     </ScrollView>
     </GestureDetector>
-      
-    <TrainDetailModal 
-      visible={showDetailModal}
-      train={selectedTrain}
-      onClose={() => setShowDetailModal(false)}
-    />
     </>
   );
 }
 
 export default function MapScreen() {
   const mapRef = useRef<MapView>(null);
+  const [selectedTrain, setSelectedTrain] = useState<any>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [region, setRegion] = useState({
     latitude: 37.78825,
     longitude: -122.4324,
@@ -194,8 +187,22 @@ export default function MapScreen() {
       />
       
       <SlideUpModal>
-        <ModalContent />
+        <ModalContent onTrainSelect={(train) => {
+          setSelectedTrain(train);
+          setShowDetailModal(true);
+        }} />
       </SlideUpModal>
+
+      {showDetailModal && selectedTrain && (
+        <View style={styles.detailModalContainer}>
+          <SlideUpModal onDismiss={() => setShowDetailModal(false)}>
+            <TrainDetailModal 
+              train={selectedTrain}
+              onClose={() => setShowDetailModal(false)}
+            />
+          </SlideUpModal>
+        </View>
+      )}
     </View>
   );
 }
@@ -206,6 +213,14 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  detailModalContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2000,
   },
   scrollView: {
     flex: 1,

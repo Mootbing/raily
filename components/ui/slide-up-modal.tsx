@@ -36,9 +36,10 @@ interface SlideUpModalProps {
   children: React.ReactNode;
   onSnapChange?: (snapPoint: 'min' | 'half' | 'max') => void;
   onHeightChange?: (height: number) => void;
+  onDismiss?: () => void;
 }
 
-export default function SlideUpModal({ children, onSnapChange, onHeightChange }: SlideUpModalProps) {
+export default function SlideUpModal({ children, onSnapChange, onHeightChange, onDismiss }: SlideUpModalProps) {
   const translateY = useSharedValue(SCREEN_HEIGHT - SNAP_POINTS.HALF);
   const context = useSharedValue({ y: 0 });
   const currentSnap = useSharedValue<'min' | 'half' | 'max'>('half');
@@ -106,6 +107,13 @@ export default function SlideUpModal({ children, onSnapChange, onHeightChange }:
       );
     })
     .onEnd(() => {
+      // Check if dragged below MIN threshold - dismiss if so
+      const currentModalHeight = SCREEN_HEIGHT - translateY.value;
+      if (currentModalHeight < SNAP_POINTS.MIN && onDismiss) {
+        runOnJS(onDismiss)();
+        return;
+      }
+      
       const snapPoint = snapToClosest(translateY.value);
       translateY.value = withSpring(snapPoint, {
         damping: 50,

@@ -1,8 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useContext } from 'react';
 import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
-import SlideUpModal from './slide-up-modal';
+import { GestureDetector } from 'react-native-gesture-handler';
+import { AppColors, Spacing } from '../../constants/theme';
+import { SlideUpModalContext } from './slide-up-modal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -22,8 +23,7 @@ interface Train {
 }
 
 interface TrainDetailModalProps {
-  visible: boolean;
-  train: Train | null;
+  train: Train;
   onClose: () => void;
 }
 
@@ -33,12 +33,11 @@ const FONTS = {
   family: 'System',
 };
 
-export default function TrainDetailModal({ visible, train, onClose }: TrainDetailModalProps) {
-  if (!train) return null;
-  if (!visible) return null;
-
+export default function TrainDetailModal({ train, onClose }: TrainDetailModalProps) {
+  const { panGesture } = useContext(SlideUpModalContext);
+  
   return (
-    <SlideUpModal>
+    <GestureDetector gesture={panGesture}>
       <View style={styles.modalContent}>
         {/* Header */}
         <View style={styles.header}>
@@ -128,7 +127,7 @@ export default function TrainDetailModal({ visible, train, onClose }: TrainDetai
           </Text>
         </View>
       </View>
-    </SlideUpModal>
+    </GestureDetector>
   );
 }
 
@@ -147,14 +146,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
   },
   modalContent: {
-    backgroundColor: 'rgba(20, 20, 25, 0.85)',
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
     paddingBottom: Spacing.xxl,
-    maxHeight: SCREEN_HEIGHT * 0.85,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderBottomWidth: 0,
+    marginHorizontal: -Spacing.xl,
   },
   header: {
     padding: Spacing.xl,
