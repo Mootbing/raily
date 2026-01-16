@@ -86,7 +86,7 @@ function ModalContent() {
           key={flight.id} 
           style={[
             styles.flightCard,
-            isMinimized && index > 0 && { opacity: 0 }
+            isMinimized && index > 0 && { display: 'none' }
           ]}
           onPress={() => {
             setSelectedTrain(flight);
@@ -160,15 +160,13 @@ export default function MapScreen() {
   });
 
   useEffect(() => {
-    let locationInterval: NodeJS.Timeout;
-
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         return;
       }
 
-      // Initial location
+      // Get initial location and set region
       const location = await Location.getCurrentPositionAsync({});
       const newRegion = {
         latitude: location.coords.latitude,
@@ -177,35 +175,8 @@ export default function MapScreen() {
         longitudeDelta: 0.0421,
       };
       setRegion(newRegion);
-      
-      // Animate to initial location
       mapRef.current?.animateToRegion(newRegion, 1000);
-
-      // Track location every 5 seconds
-      locationInterval = setInterval(async () => {
-        try {
-          const currentLocation = await Location.getCurrentPositionAsync({});
-          const updatedRegion = {
-            latitude: currentLocation.coords.latitude,
-            longitude: currentLocation.coords.longitude,
-            latitudeDelta: 0.0922,
-            longitudeDelta: 0.0421,
-          };
-          setRegion(updatedRegion);
-          
-          // Smoothly animate to new location (lerp effect)
-          mapRef.current?.animateToRegion(updatedRegion, 1000);
-        } catch (error) {
-          console.error('Error tracking location:', error);
-        }
-      }, 5000);
     })();
-
-    return () => {
-      if (locationInterval) {
-        clearInterval(locationInterval);
-      }
-    };
   }, []);
 
   return (
