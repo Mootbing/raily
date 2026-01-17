@@ -156,7 +156,7 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
                   <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} style={{ marginRight: 6 }} />
                   <Text style={styles.durationText}>{duration}</Text>
                   {distanceMiles !== null && (
-                    <Text style={[styles.durationText, { marginLeft: 8 }]}>{distanceMiles.toFixed(0)} mi</Text>
+                    <Text style={[styles.durationText, { marginLeft: 6 }]}> • {distanceMiles.toFixed(0)} mi</Text>
                   )}
                 </View>
                 <View style={styles.horizontalLine} />
