@@ -146,7 +146,7 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
             {/* Departure Info */}
             <View style={styles.infoSection}>
               <View style={styles.infoHeader}>
-                <MaterialCommunityIcons name="arrow-top-right" size={16} color={COLORS.primary} />
+                <MaterialCommunityIcons name="arrow-top-right" size={16} color="rgba(255,255,255,0.1)" />
                 <Text style={styles.locationCode}>{trainData.fromCode}</Text>
                 <Text style={styles.locationName}> • {trainData.from} Intl.</Text>
               </View>
@@ -185,7 +185,7 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
             {/* Arrival Info */}
             <View style={styles.infoSection}>
               <View style={styles.infoHeader}>
-                <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={COLORS.primary} />
+                <MaterialCommunityIcons name="arrow-bottom-left" size={16} color="rgba(255,255,255,0.1)" />
                 <Text style={styles.locationCode}>{trainData.toCode}</Text>
                 <Text style={styles.locationName}> • {trainData.to} Intl.</Text>
               </View>

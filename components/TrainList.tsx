@@ -77,7 +77,9 @@ export function TrainList({ flights, onTrainSelect }: { flights: Train[]; onTrai
                   style={styles.amtrakLogo}
                   fadeDuration={0}
                 />
-                <Text style={styles.flightNumber}>{flight.airline} {flight.flightNumber}</Text>
+                <Text style={[styles.flightNumber, { color: COLORS.secondary, fontWeight: '400' }]}> 
+                  {flight.routeName ? flight.routeName : flight.airline} {flight.flightNumber}
+                </Text>
                 <Text style={styles.flightDate}>{flight.date}</Text>
                 {flight.realtime?.status && (
                   <View style={[

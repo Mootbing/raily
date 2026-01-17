@@ -143,15 +143,23 @@ export class GTFSParser {
   search(query: string): SearchResult[] {
     const results: SearchResult[] = [];
     let queryLower = query.toLowerCase();
-    
-    // Strip "AMT" prefix if present (e.g., "AMT123" becomes "123")
+    // Support searching by AMT{train}, {name}{train}, or just {train}
+    let trainNumberQuery = '';
+    let namePrefix = '';
+    // If query starts with 'amt', treat as AMT{train}
     if (queryLower.startsWith('amt')) {
-      queryLower = queryLower.substring(3);
+      trainNumberQuery = queryLower.substring(3);
+    } else {
+      // Try to match {name}{train} pattern (e.g., acela2150, crescent19)
+      const nameTrainMatch = queryLower.match(/^([a-z]+)(\d{1,4})$/);
+      if (nameTrainMatch) {
+        namePrefix = nameTrainMatch[1];
+        trainNumberQuery = nameTrainMatch[2];
+      }
     }
 
     // Search stops (stations)
     this.stops.forEach((stop) => {
-      // Match by station name
       if (stop.stop_name.toLowerCase().includes(queryLower)) {
         results.push({
           id: `stop-name-${stop.stop_id}`,
@@ -192,6 +200,27 @@ export class GTFSParser {
 
     // Search trips (trains) by their stops
     this.stopTimes.forEach((times, tripId) => {
+      // Add search by train number, AMT{train}, or {name}{train}
+      const tripIdLower = tripId.toLowerCase();
+      // Find route name for this trip if available
+      let routeName = '';
+      // Try to get route name from the first stop's route if possible
+      if (times.length > 0 && times[0].route_id) {
+        routeName = (this.routes.get(times[0].route_id)?.route_long_name || '').toLowerCase();
+      }
+      // Check for AMT{train} or {name}{train} match
+      if (
+        (trainNumberQuery && tripIdLower.endsWith(trainNumberQuery) &&
+          (!namePrefix || (routeName && routeName.replace(/\s/g, '').startsWith(namePrefix))))
+      ) {
+        results.push({
+          id: `tripid-${tripId}`,
+          name: routeName ? `${this.routes.get(times[0].route_id)?.route_long_name} ${tripId}` : `Train ${tripId}`,
+          subtitle: routeName ? `(${routeName})` : '',
+          type: 'train',
+          data: { trip_id: tripId },
+        });
+      }
       const uniqueStops = new Set(times.map(t => t.stop_id));
       uniqueStops.forEach((stopId) => {
         const stop = this.stops.get(stopId);
