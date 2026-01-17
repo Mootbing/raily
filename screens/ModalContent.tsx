@@ -133,11 +133,12 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
   }, []);
 
   // Save train with segmentation support
-  const saveTrainWithSegment = async (tripId: string, fromCode: string, toCode: string) => {
+  const saveTrainWithSegment = async (tripId: string, fromCode: string, toCode: string, travelDate: Date) => {
     const ref: SavedTrainRef = {
       tripId,
       fromCode,
       toCode,
+      travelDate: travelDate.getTime(),
       savedAt: Date.now(),
     };
     const saved = await TrainStorageService.saveTrainRef(ref);
@@ -249,8 +250,8 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
     snapToPoint?.('min');
   };
 
-  const handleSelectTrip = async (tripId: string, fromCode: string, toCode: string) => {
-    await saveTrainWithSegment(tripId, fromCode, toCode);
+  const handleSelectTrip = async (tripId: string, fromCode: string, toCode: string, date: Date) => {
+    await saveTrainWithSegment(tripId, fromCode, toCode, date);
     setIsSearchFocused(false);
     snapToPoint?.('min');
   };

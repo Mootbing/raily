@@ -148,7 +148,7 @@ function createPathData(
 export const RouteOverlay: React.FC<RouteOverlayProps> = ({
   routes,
   viewport,
-  strokeColor = '#3B82F6',
+  strokeColor = '#FFFFFF',
   strokeWidth = 3,
   opacity = 0.8,
 }) => {

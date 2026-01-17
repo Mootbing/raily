@@ -1,43 +1,75 @@
 import * as Location from 'expo-location';
-import React, { useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { AnimatedRoute } from '../components/map/AnimatedRoute';
+import { AnimatedStationMarker } from '../components/map/AnimatedStationMarker';
 import MapSettingsPill, { MapType, RouteMode, StationMode, TrainMode } from '../components/map/MapSettingsPill';
+import DepartureBoardModal from '../components/ui/departure-board-modal';
 import SlideUpModal from '../components/ui/slide-up-modal';
 import TrainDetailModal from '../components/ui/train-detail-modal';
 import { AppColors } from '../constants/theme';
 import { TrainProvider, useTrainContext } from '../context/TrainContext';
 import { useRealtime } from '../hooks/useRealtime';
 import { useShapes } from '../hooks/useShapes';
+import { useStations } from '../hooks/useStations';
 import { TrainAPIService } from '../services/api';
+import type { ViewportBounds } from '../services/shape-loader';
 import { TrainStorageService } from '../services/storage';
-import type { Train } from '../types/train';
+import type { Stop, Train } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
 import { getColoredRouteColor, getRouteColor, getStrokeWidthForZoom, getColoredRouteColor as getTrainMarkerColor } from '../utils/route-colors';
 import { clusterStations, getStationAbbreviation } from '../utils/station-clustering';
 import { ModalContent } from './ModalContent';
 import { styles } from './styles';
 
+// Convert map region to viewport bounds for lazy loading
+function regionToViewportBounds(region: {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}): ViewportBounds {
+  return {
+    minLat: region.latitude - region.latitudeDelta / 2,
+    maxLat: region.latitude + region.latitudeDelta / 2,
+    minLon: region.longitude - region.longitudeDelta / 2,
+    maxLon: region.longitude + region.longitudeDelta / 2,
+  };
+}
+
 function MapScreenInner() {
   const mapRef = useRef<MapView>(null);
   const mainModalRef = useRef<any>(null);
   const detailModalRef = useRef<any>(null);
-  const [showDetailModal, setShowDetailModal] = React.useState(false);
-  const [stations, setStations] = React.useState<Array<{ id: string; name: string; lat: number; lon: number }>>([]);
-  const [region, setRegion] = React.useState<{
+  const departureBoardRef = useRef<any>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showDepartureBoard, setShowDepartureBoard] = useState(false);
+  const [selectedStation, setSelectedStation] = useState<Stop | null>(null);
+
+  // Track pending station for animation sequencing (ref to avoid async state issues)
+  const pendingStationRef = useRef<Stop | null>(null);
+  const [region, setRegion] = useState<{
     latitude: number;
     longitude: number;
     latitudeDelta: number;
     longitudeDelta: number;
   } | null>(null);
-  const [mapType, setMapType] = React.useState<MapType>('standard');
-  const [routeMode, setRouteMode] = React.useState<RouteMode>('secondary');
-  const [stationMode, setStationMode] = React.useState<StationMode>('auto');
-  const [trainMode, setTrainMode] = React.useState<TrainMode>('white');
+  // Debounced viewport bounds for lazy loading (updates less frequently than region)
+  const [viewportBounds, setViewportBounds] = useState<ViewportBounds | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mapType, setMapType] = useState<MapType>('standard');
+  const [routeMode, setRouteMode] = useState<RouteMode>('secondary');
+  const [stationMode, setStationMode] = useState<StationMode>('auto');
+  const [trainMode, setTrainMode] = useState<TrainMode>('white');
   const { savedTrains, setSavedTrains, selectedTrain, setSelectedTrain } = useTrainContext();
   const insets = useSafeAreaInsets();
+
+  // Use lazy-loaded stations and shapes based on viewport
+  const stations = useStations(viewportBounds ?? undefined);
+  const { visibleShapes } = useShapes(viewportBounds ?? undefined);
 
   // Track pending train for animation sequencing (ref to avoid async state issues)
   const pendingTrainRef = React.useRef<Train | null>(null);
@@ -50,10 +82,12 @@ function MapScreenInner() {
     mainModalRef.current?.dismiss?.();
   };
 
-  // When main modal finishes sliding out, show the detail modal
+  // When main modal finishes sliding out, show the detail modal or departure board
   const handleMainModalDismissed = () => {
     if (pendingTrainRef.current) {
       setShowDetailModal(true);
+    } else if (pendingStationRef.current) {
+      setShowDepartureBoard(true);
     }
   };
 
@@ -67,10 +101,75 @@ function MapScreenInner() {
     pendingTrainRef.current = null;
     setShowDetailModal(false);
     setSelectedTrain(null);
-    // Slide main modal back in
+    // If we came from departure board, show it again; otherwise show main modal
     setTimeout(() => {
-      mainModalRef.current?.slideIn?.();
+      if (pendingStationRef.current) {
+        // Re-show the departure board
+        setShowDepartureBoard(true);
+      } else {
+        mainModalRef.current?.slideIn?.();
+      }
     }, 50);
+  };
+
+  // Handle station pin press - show departure board
+  const handleStationPress = (cluster: { id: string; lat: number; lon: number; isCluster: boolean; stations: Array<{ id: string; name: string; lat: number; lon: number }> }) => {
+    // If it's a cluster, just zoom in
+    if (cluster.isCluster) {
+      mapRef.current?.animateToRegion({
+        latitude: cluster.lat,
+        longitude: cluster.lon,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      }, 500);
+      return;
+    }
+
+    // Get the station data
+    const stationData = cluster.stations[0];
+    const stop: Stop = {
+      stop_id: stationData.id,
+      stop_name: stationData.name,
+      stop_lat: stationData.lat,
+      stop_lon: stationData.lon,
+    };
+
+    // Store in ref to avoid race condition with state updates
+    pendingStationRef.current = stop;
+    setSelectedStation(stop);
+    // Dismiss main modal first, then show departure board
+    mainModalRef.current?.dismiss?.();
+  };
+
+  // Handle train selection from departure board
+  const handleDepartureBoardTrainSelect = (train: Train) => {
+    pendingTrainRef.current = train;
+    setSelectedTrain(train);
+    // Dismiss departure board modal, then show detail modal
+    departureBoardRef.current?.dismiss?.();
+  };
+
+  // When departure board dismisses after selecting a train
+  const handleDepartureBoardDismissed = () => {
+    if (pendingTrainRef.current) {
+      setShowDepartureBoard(false);
+      setShowDetailModal(true);
+    } else {
+      // User closed departure board without selecting a train
+      setShowDepartureBoard(false);
+      setSelectedStation(null);
+      pendingStationRef.current = null;
+      setTimeout(() => {
+        mainModalRef.current?.slideIn?.();
+      }, 50);
+    }
+  };
+
+  // Handle close button on departure board
+  const handleDepartureBoardClose = () => {
+    pendingTrainRef.current = null;
+    pendingStationRef.current = null;
+    departureBoardRef.current?.dismiss?.();
   };
 
   // Get user location on mount
@@ -124,7 +223,7 @@ function MapScreenInner() {
     return () => clearInterval(interval);
   }, [gtfsLoaded]);
 
-  // Load stations and trains after GTFS is ready
+  // Load saved trains after GTFS is ready
   React.useEffect(() => {
     if (!gtfsLoaded) return;
 
@@ -134,19 +233,39 @@ function MapScreenInner() {
         trains.map(train => TrainAPIService.refreshRealtimeData(train))
       );
       setSavedTrains(trainsWithRealtime);
-
-      const allStops = gtfsParser.getAllStops();
-      setStations(allStops.map(stop => ({ id: stop.stop_id, name: stop.stop_name, lat: stop.stop_lat, lon: stop.stop_lon })));
     })();
   }, [setSavedTrains, gtfsLoaded]);
 
   useRealtime(savedTrains, setSavedTrains, 20000);
 
-  const { visibleShapes } = useShapes();
-
-  const handleRegionChangeComplete = (newRegion: any) => {
+  // Handle region changes with debounced viewport bounds updates
+  const handleRegionChangeComplete = useCallback((newRegion: any) => {
     setRegion(newRegion);
-  };
+
+    // Debounce viewport bounds updates to prevent excessive re-renders
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setViewportBounds(regionToViewportBounds(newRegion));
+    }, 150); // 150ms debounce for smooth panning
+  }, []);
+
+  // Initialize viewport bounds when region is first set
+  React.useEffect(() => {
+    if (region && !viewportBounds) {
+      setViewportBounds(regionToViewportBounds(region));
+    }
+  }, [region, viewportBounds]);
+
+  // Cleanup debounce timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleRecenter = async () => {
     try {
@@ -216,14 +335,12 @@ function MapScreenInner() {
             ? getColoredRouteColor(shape.id)
             : getRouteColor(shape.id);
           return (
-            <Polyline
+            <AnimatedRoute
               key={shape.id}
+              id={shape.id}
               coordinates={shape.coordinates}
               strokeColor={colorScheme.stroke}
               strokeWidth={Math.max(2, baseStrokeWidth)}
-              lineCap="round"
-              lineJoin="round"
-              geodesic={true}
             />
           );
         })}
@@ -237,43 +354,23 @@ function MapScreenInner() {
               ? cluster.stations[0].name
               : getStationAbbreviation(cluster.stations[0].id, cluster.stations[0].name);
           return (
-            <Marker
+            <AnimatedStationMarker
               key={cluster.id}
-              coordinate={{ latitude: cluster.lat, longitude: cluster.lon }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              cluster={cluster}
+              showFullName={showFullName}
+              displayName={displayName}
               onPress={() => {
+                // Center map on station
                 mapRef.current?.animateToRegion({
                   latitude: cluster.lat,
                   longitude: cluster.lon,
                   latitudeDelta: 0.02,
                   longitudeDelta: 0.02,
                 }, 500);
+                // Show departure board
+                handleStationPress(cluster);
               }}
-            >
-              <View style={{ alignItems: 'center' }}>
-                <Ionicons
-                  name="location"
-                  size={24}
-                  color={AppColors.primary}
-                />
-                <Text
-                  style={{
-                    color: AppColors.primary,
-                    fontSize: cluster.isCluster ? 10 : 9,
-                    fontWeight: '600',
-                    marginTop: -4,
-                    textAlign: 'center',
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                    paddingHorizontal: 4,
-                    paddingVertical: 1,
-                    borderRadius: 3,
-                  }}
-                  numberOfLines={1}
-                >
-                  {displayName}
-                </Text>
-              </View>
-            </Marker>
+            />
           );
         })}
 
@@ -346,6 +443,22 @@ function MapScreenInner() {
           <TrainDetailModal
             train={selectedTrain}
             onClose={handleDetailModalClose}
+          />
+        </SlideUpModal>
+      )}
+
+      {/* Departure board modal - Station departures */}
+      {showDepartureBoard && selectedStation && (
+        <SlideUpModal
+          ref={departureBoardRef}
+          minSnapPercent={0.1}
+          initialSnap="max"
+          onDismiss={handleDepartureBoardDismissed}
+        >
+          <DepartureBoardModal
+            station={selectedStation}
+            onClose={handleDepartureBoardClose}
+            onTrainSelect={handleDepartureBoardTrainSelect}
           />
         </SlideUpModal>
       )}

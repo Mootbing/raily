@@ -32,7 +32,7 @@ export const AppColors = {
   secondary: 'rgba(255, 255, 255, 0.5)',
   tertiary: 'rgba(255, 255, 255, 0.2)',
   accent: '#FF6B35',
-  accentBlue: '#0A84FF',
+  accentBlue: '#FFFFFF',
   success: '#10B981',
   error: '#EF4444',
   shadow: '#000',

@@ -1,5 +1,6 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useState, useRef } from 'react';
-import { Text, TextInput, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { Platform, Text, TextInput, TouchableOpacity, View, StyleSheet } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AppColors, BorderRadius, FontSizes, Spacing } from '../constants/theme';
 import { getTrainDisplayName } from '../services/api';
@@ -14,7 +15,7 @@ interface TripResult {
 }
 
 interface TwoStationSearchProps {
-  onSelectTrip: (tripId: string, fromCode: string, toCode: string) => void;
+  onSelectTrip: (tripId: string, fromCode: string, toCode: string, date: Date) => void;
   onClose: () => void;
 }
 
@@ -33,9 +34,20 @@ function formatTime(time24: string): string {
   return `${h}:${m} ${ampm}`;
 }
 
+/**
+ * Format date for display in pill (e.g., "Jan 4, 2025")
+ */
+function formatDateForPill(date: Date): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
 export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProps) {
   const [fromStation, setFromStation] = useState<Stop | null>(null);
   const [toStation, setToStation] = useState<Stop | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [tempDate, setTempDate] = useState<Date>(new Date()); // Temp date for picker before confirmation
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [stationResults, setStationResults] = useState<Stop[]>([]);
   const [tripResults, setTripResults] = useState<TripResult[]>([]);
@@ -66,15 +78,22 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
     }
   }, [searchQuery, isDataLoaded]);
 
-  // Find trips when both stations are selected
+  // Find trips when both stations AND date are selected
   useEffect(() => {
-    if (fromStation && toStation) {
+    if (fromStation && toStation && selectedDate) {
       const trips = gtfsParser.findTripsWithStops(fromStation.stop_id, toStation.stop_id);
       setTripResults(trips);
     } else {
       setTripResults([]);
     }
-  }, [fromStation, toStation]);
+  }, [fromStation, toStation, selectedDate]);
+
+  // Show date picker when both stations are selected but no date yet
+  useEffect(() => {
+    if (fromStation && toStation && !selectedDate) {
+      setShowDatePicker(true);
+    }
+  }, [fromStation, toStation, selectedDate]);
 
   const handleSelectStation = (station: Stop) => {
     if (activeField === 'from') {
@@ -91,6 +110,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
   const handleClearFrom = () => {
     setFromStation(null);
     setToStation(null);
+    setSelectedDate(null);
     setTripResults([]);
     setActiveField('from');
     setSearchQuery('');
@@ -99,14 +119,37 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
 
   const handleClearTo = () => {
     setToStation(null);
+    setSelectedDate(null);
     setTripResults([]);
     setActiveField('to');
     setSearchQuery('');
     setTimeout(() => searchInputRef.current?.focus(), 100);
   };
 
-  const showingResults = fromStation && toStation;
-  const showingStationSearch = !showingResults && searchQuery.length > 0;
+  const handleClearDate = () => {
+    setSelectedDate(null);
+    setTripResults([]);
+    setShowDatePicker(true);
+  };
+
+  const handleDateChange = (event: any, date?: Date) => {
+    if (Platform.OS === 'android') {
+      // On Android, the picker dismisses automatically on selection
+      setShowDatePicker(false);
+      if (date) {
+        setSelectedDate(date);
+      }
+    } else {
+      // On iOS, just update temp date - user must press confirm button
+      if (date) {
+        setTempDate(date);
+      }
+    }
+  };
+
+  const showingResults = fromStation && toStation && selectedDate;
+  const showingStationSearch = !showingResults && searchQuery.length > 0 && !showDatePicker;
+  const showingDatePicker = fromStation && toStation && !selectedDate;
 
   // Before first station is selected - show original search bar style
   if (!fromStation) {
@@ -160,7 +203,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
     );
   }
 
-  // After first station is selected - show split view with pill
+  // After first station is selected - show split view with pills
   return (
     <View style={styles.container}>
       {/* Split Station Input Row */}
@@ -192,6 +235,18 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
               autoFocus
             />
           </View>
+        )}
+
+        {/* Date Pill (after date is selected) */}
+        {selectedDate && (
+          <>
+            <View style={styles.dateSeparator} />
+            <TouchableOpacity style={styles.datePill} onPress={handleClearDate}>
+              <Ionicons name="calendar-outline" size={14} color={AppColors.primary} />
+              <Text style={styles.datePillText}>{formatDateForPill(selectedDate)}</Text>
+              <Ionicons name="close" size={14} color={AppColors.primary} />
+            </TouchableOpacity>
+          </>
         )}
 
         {/* Close button */}
@@ -228,6 +283,35 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
         </View>
       )}
 
+      {/* Date Picker Section */}
+      {showingDatePicker && (
+        <View style={styles.datePickerContainer}>
+          <Text style={styles.sectionLabel}>SELECT TRAVEL DATE</Text>
+          <View style={styles.datePickerWrapper}>
+            <DateTimePicker
+              value={tempDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleDateChange}
+              minimumDate={new Date()}
+              themeVariant="dark"
+              style={styles.datePicker}
+            />
+          </View>
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={styles.confirmDateButton}
+              onPress={() => {
+                setSelectedDate(tempDate);
+                setShowDatePicker(false);
+              }}
+            >
+              <Text style={styles.confirmDateText}>Confirm Date</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* Trip Results */}
       {showingResults && (
         <View style={styles.resultsContainer}>
@@ -243,7 +327,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
               <TouchableOpacity
                 key={trip.tripId}
                 style={styles.tripItem}
-                onPress={() => onSelectTrip(trip.tripId, fromStation.stop_id, toStation.stop_id)}
+                onPress={() => onSelectTrip(trip.tripId, fromStation.stop_id, toStation.stop_id, selectedDate)}
               >
                 <View style={styles.tripIcon}>
                   <Ionicons name="train" size={20} color={AppColors.primary} />
@@ -265,7 +349,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
                     </Text>
                   )}
                 </View>
-                <Ionicons name="add-circle" size={24} color={AppColors.accentBlue} />
+                <Ionicons name="add" size={24} color={AppColors.primary} />
               </TouchableOpacity>
               );
             })
@@ -274,7 +358,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
       )}
 
       {/* Hint when from is selected but no to search */}
-      {!showingStationSearch && !showingResults && searchQuery.length === 0 && (
+      {!showingStationSearch && !showingResults && !showingDatePicker && searchQuery.length === 0 && !toStation && (
         <View style={styles.hintContainer}>
           <Ionicons name="information-circle-outline" size={20} color={AppColors.secondary} />
           <Text style={styles.hintText}>
@@ -320,6 +404,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: AppColors.border.secondary,
     gap: Spacing.sm,
+    flexWrap: 'wrap',
   },
   stationPill: {
     flexDirection: 'row',
@@ -333,6 +418,28 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   stationPillText: {
+    color: AppColors.primary,
+    fontSize: FontSizes.searchLabel,
+    fontWeight: '600',
+  },
+  dateSeparator: {
+    width: 1,
+    height: 20,
+    backgroundColor: AppColors.border.secondary,
+    marginHorizontal: 4,
+  },
+  datePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderWidth: 1,
+    borderColor: AppColors.primary,
+    gap: 4,
+  },
+  datePillText: {
     color: AppColors.primary,
     fontSize: FontSizes.searchLabel,
     fontWeight: '600',
@@ -399,6 +506,34 @@ const styles = StyleSheet.create({
   stationCode: {
     fontSize: FontSizes.daysLabel,
     color: AppColors.secondary,
+  },
+  datePickerContainer: {
+    flex: 1,
+  },
+  datePickerWrapper: {
+    backgroundColor: AppColors.background.primary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: AppColors.border.primary,
+    alignItems: 'center',
+  },
+  datePicker: {
+    width: '100%',
+    height: 200,
+  },
+  confirmDateButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    marginTop: Spacing.md,
+    alignItems: 'center',
+  },
+  confirmDateText: {
+    color: '#000000',
+    fontSize: FontSizes.searchLabel,
+    fontWeight: '600',
   },
   tripItem: {
     flexDirection: 'row',

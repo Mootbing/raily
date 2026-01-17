@@ -25,6 +25,28 @@ function formatTime(time24: string): string {
   return `${h}:${m} ${ampm}`;
 }
 
+/**
+ * Format date for display (e.g., "Jan 4")
+ */
+function formatDateForDisplay(timestamp: number): string {
+  const date = new Date(timestamp);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[date.getMonth()]} ${date.getDate()}`;
+}
+
+/**
+ * Calculate days away from a travel date
+ */
+function calculateDaysAway(travelDate: number): number {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const travel = new Date(travelDate);
+  travel.setHours(0, 0, 0, 0);
+  const diffTime = travel.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+}
+
 export class TrainStorageService {
   /**
    * Get all saved train references
@@ -87,6 +109,13 @@ export class TrainStorageService {
               }
             }
           }
+
+          // Update date and daysAway based on travel date
+          if (ref.travelDate) {
+            train.date = formatDateForDisplay(ref.travelDate);
+            train.daysAway = calculateDaysAway(ref.travelDate);
+          }
+
           trains.push(train);
         }
       }
@@ -105,11 +134,12 @@ export class TrainStorageService {
     try {
       const refs = await this.getSavedTrainRefs();
 
-      // Check if train already exists (same tripId and segment)
+      // Check if train already exists (same tripId, segment, and travel date)
       const exists = refs.some(r =>
         r.tripId === ref.tripId &&
         r.fromCode === ref.fromCode &&
-        r.toCode === ref.toCode
+        r.toCode === ref.toCode &&
+        r.travelDate === ref.travelDate
       );
       if (exists) {
         return false;

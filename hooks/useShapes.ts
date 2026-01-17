@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { shapeLoader } from '../services/shape-loader';
+import { shapeLoader, type ViewportBounds } from '../services/shape-loader';
 import { gtfsParser } from '../utils/gtfs-parser';
 
-export function useShapes() {
+export function useShapes(bounds?: ViewportBounds) {
   const [gtfsLoaded, setGtfsLoaded] = useState(gtfsParser.isLoaded);
 
   // Poll for GTFS loaded state
@@ -18,10 +18,16 @@ export function useShapes() {
     return () => clearInterval(interval);
   }, [gtfsLoaded]);
 
-  const allShapes = useMemo(() => {
+  const visibleShapes = useMemo(() => {
     if (!gtfsLoaded) return [];
-    return shapeLoader.getAllShapes();
-  }, [gtfsLoaded]);
 
-  return { visibleShapes: allShapes };
+    // If bounds provided, filter to viewport; otherwise return all
+    if (bounds) {
+      // Use larger padding for shapes since routes span larger areas
+      return shapeLoader.getVisibleShapes(bounds, 0.5);
+    }
+    return shapeLoader.getAllShapes();
+  }, [gtfsLoaded, bounds?.minLat, bounds?.maxLat, bounds?.minLon, bounds?.maxLon]);
+
+  return { visibleShapes };
 }
