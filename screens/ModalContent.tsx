@@ -256,12 +256,8 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
     }
   }, [isCollapsed, isSearchFocused]);
 
-  // When search is deactivated, ensure we're at min (collapsed) state
-  useEffect(() => {
-    if (!isSearchFocused && !isCollapsed && searchQuery === '') {
-      snapToPoint?.('min');
-    }
-  }, [isSearchFocused, searchQuery, isCollapsed, snapToPoint]);
+  // This effect was causing the modal to bounce back to bottom
+  // Removed - let users manually control modal position
 
   return (
     <View style={{ flex: 1 }}>

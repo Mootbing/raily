@@ -12,6 +12,7 @@ import { File, Paths } from 'expo-file-system';
 import { strFromU8, unzipSync } from 'fflate';
 import type { Route, Shape, Stop, StopTime } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
+import { shapeLoader } from './shape-loader';
 
 const GTFS_URL = 'https://content.amtrak.com/content/gtfs/GTFS.zip';
 const GTFS_CACHE_DIR = 'gtfs-cache';
@@ -214,6 +215,10 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
       const shapes = await readJSONFromFile<Record<string, Shape[]>>(GTFS_FILES.shapes);
       if (routes && stops && stopTimes) {
         gtfsParser.overrideData(routes, stops, stopTimes, shapes || {});
+
+        // Initialize shape loader for map rendering
+        shapeLoader.initialize(shapes || {});
+
         report('Using cached GTFS', 1, 'Cache age < 7 days');
         return { usedCache: true };
       }
@@ -255,6 +260,10 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_FETCH, String(Date.now()));
 
     gtfsParser.overrideData(routes, stops, stopTimes, shapes);
+
+    // Initialize shape loader for map rendering
+    shapeLoader.initialize(shapes);
+
     report('Refresh complete', 1, 'Applied latest GTFS');
     return { usedCache: false };
   } catch (err) {

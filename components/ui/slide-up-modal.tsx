@@ -1,12 +1,13 @@
 import { BlurView } from 'expo-blur';
 import React, { createContext, useEffect, useState } from 'react';
-import { Dimensions, Platform, StatusBar, StyleSheet, View } from 'react-native';
+import { Dimensions, Platform, StatusBar, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     runOnJS,
     useAnimatedStyle,
     useSharedValue,
     withSpring,
+    withTiming,
 } from 'react-native-reanimated';
 import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
 
@@ -56,16 +57,18 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   const modalHeight = useSharedValue(SNAP_POINTS.HALF);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const glowOpacity = useSharedValue(0);
 
   React.useImperativeHandle(ref, () => ({
     snapToPoint,
   }), []);
 
   useEffect(() => {
-    // Animate in on mount
+    // Animate in on mount with subtle overshoot
     translateY.value = withSpring(SCREEN_HEIGHT - SNAP_POINTS.HALF, {
-      damping: 50,
-      stiffness: 200,
+      damping: 40,
+      stiffness: 280,
+      overshootClamping: false,
     });
   }, []);
 
@@ -86,10 +89,11 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
     
     runOnJS(setIsFullscreen)(point === 'max');
     runOnJS(setIsCollapsed)(point === 'min');
-    
+
     translateY.value = withSpring(targetY, {
-      damping: 50,
-      stiffness: 200,
+      damping: 40,
+      stiffness: 280,
+      overshootClamping: false,
     });
   };
 
@@ -164,8 +168,9 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
       }
 
       translateY.value = withSpring(targetY, {
-        damping: 50,
-        stiffness: 200,
+        damping: 40,
+        stiffness: 280,
+        overshootClamping: false,
       });
     })
     .simultaneousWithExternalGesture();
@@ -177,22 +182,10 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   });
 
   const animatedBorderRadius = useAnimatedStyle(() => {
-    // Calculate current height of modal
-    const currentHeight = SCREEN_HEIGHT - translateY.value;
-
-    // Progress from HALF (50%) to MAX (95%)
-    const halfHeight = SNAP_POINTS.HALF;
-    const maxHeight = SNAP_POINTS.MAX;
-
-    // Calculate interpolation progress (0 at 50%, 1 at 95%)
-    const progress = Math.max(0, Math.min(1, (currentHeight - halfHeight) / (maxHeight - halfHeight)));
-
-    // Interpolate border radius from BorderRadius.xl (32) to 0
-    const radius = BorderRadius.xl * (1 - progress);
-
+    // Keep border radius constant at BorderRadius.xl (32)
     return {
-      borderTopLeftRadius: radius,
-      borderTopRightRadius: radius,
+      borderTopLeftRadius: BorderRadius.xl,
+      borderTopRightRadius: BorderRadius.xl,
     };
   });
 
@@ -226,33 +219,75 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
     };
   });
 
+  const animatedMargins = useAnimatedStyle(() => {
+    // Calculate current height of modal
+    const currentHeight = SCREEN_HEIGHT - translateY.value;
+
+    // Progress from HALF (50%) to MAX (95%)
+    const halfHeight = SNAP_POINTS.HALF;
+    const maxHeight = SNAP_POINTS.MAX;
+
+    // Calculate interpolation progress (0 at 50%, 1 at 95%)
+    const progress = Math.max(0, Math.min(1, (currentHeight - halfHeight) / (maxHeight - halfHeight)));
+
+    // Interpolate horizontal margins from 10px to 0px
+    // At 35% and 50%: 10px margins
+    // At 95%: 0px margins
+    const horizontalMargin = 10 * (1 - progress);
+
+    // Add 15px top margin at fullscreen (95%)
+    const topMargin = 15 * progress;
+
+    return {
+      marginLeft: horizontalMargin,
+      marginRight: horizontalMargin,
+      marginTop: topMargin,
+    };
+  });
+
+  const animatedGlow = useAnimatedStyle(() => {
+    return {
+      shadowOpacity: 0.3 + glowOpacity.value * 0.2,
+      shadowRadius: 20 + glowOpacity.value * 10,
+    };
+  });
+
+  const handlePressIn = () => {
+    glowOpacity.value = withTiming(1, { duration: 150 });
+  };
+
+  const handlePressOut = () => {
+    glowOpacity.value = withTiming(0, { duration: 300 });
+  };
+
   return (
     <GestureDetector gesture={panGesture}>
       <Animated.View style={[styles.container, animatedStyle]}>
         <SlideUpModalContext.Provider value={{ isFullscreen, isCollapsed, scrollOffset, panGesture, modalHeight, snapToPoint }}>
-          <Animated.View
-            style={[
-              styles.blurContainer,
-              animatedBorderRadius,
-              animatedBackground,
-              isFullscreen && styles.blurContainerFullscreen,
-              isFullscreen && {
-                // Extend to true top of screen (beyond status bar)
-                marginTop: -(statusBarHeight || 0),
-                marginBottom: -safeAreaBottomInset,
-              },
-            ]}
-          >
-            <BlurView
-              intensity={40}
-              style={StyleSheet.absoluteFill}
+          <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut}>
+            <Animated.View
+              style={[
+                styles.blurContainer,
+                animatedBorderRadius,
+                animatedBackground,
+                animatedMargins,
+                animatedGlow,
+                isFullscreen && styles.blurContainerFullscreen,
+              ]}
             >
-              <Animated.View style={[styles.content, animatedBorderRadius, isFullscreen && { paddingTop: statusBarHeight || 0 }]}>
-                <View style={styles.handleContainer} />
-                <View style={styles.childrenContainer}>{children}</View>
+              <Animated.View style={[StyleSheet.absoluteFill, animatedBorderRadius, { overflow: 'hidden' }]}>
+                <BlurView
+                  intensity={40}
+                  style={StyleSheet.absoluteFill}
+                >
+                  <Animated.View style={styles.content}>
+                    <View style={styles.handleContainer} />
+                    <View style={styles.childrenContainer}>{children}</View>
+                  </Animated.View>
+                </BlurView>
               </Animated.View>
-            </BlurView>
-          </Animated.View>
+            </Animated.View>
+          </TouchableWithoutFeedback>
         </SlideUpModalContext.Provider>
       </Animated.View>
     </GestureDetector>

@@ -1,8 +1,9 @@
-import { BlurView } from 'expo-blur';
-import React, { useRef } from 'react';
-import { Animated, Modal, View } from 'react-native';
+import React, { useRef, useMemo } from 'react';
+import { Animated, TouchableOpacity, View, Text } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SlideUpModal from '../components/ui/slide-up-modal';
 import TrainDetailModal from '../components/ui/train-detail-modal';
 import { AppColors } from '../constants/theme';
@@ -12,12 +13,15 @@ import { useShapes } from '../hooks/useShapes';
 import { TrainAPIService } from '../services/api';
 import { TrainStorageService } from '../services/storage';
 import { gtfsParser } from '../utils/gtfs-parser';
+import { getRouteColor, getColoredRouteColor, getStrokeWidthForZoom } from '../utils/route-colors';
+import { clusterStations, getStationAbbreviation } from '../utils/station-clustering';
 import { ModalContent } from './ModalContent';
 import { styles } from './styles';
 
 function MapScreenInner() {
   const mapRef = useRef<MapView>(null);
   const mainModalRef = useRef<any>(null);
+  const detailModalRef = useRef<any>(null);
   const [showDetailModal, setShowDetailModal] = React.useState(false);
   const [stations, setStations] = React.useState<Array<{ id: string; name: string; lat: number; lon: number }>>([]);
   const [region, setRegion] = React.useState({
@@ -26,9 +30,12 @@ function MapScreenInner() {
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
+  const [mapType, setMapType] = React.useState<'standard' | 'satellite'>('standard');
+  const [routeMode, setRouteMode] = React.useState<'hidden' | 'secondary' | 'colored'>('secondary');
   const { savedTrains, setSavedTrains, selectedTrain, setSelectedTrain } = useTrainContext();
   const [selectedStation, setSelectedStation] = React.useState<string | null>(null);
   const markerScale = useRef(new Animated.Value(1)).current;
+  const insets = useSafeAreaInsets();
 
   React.useEffect(() => {
     if (selectedStation) {
@@ -47,6 +54,15 @@ function MapScreenInner() {
       }).start();
     }
   }, [selectedStation, markerScale]);
+
+  // Animate detail modal to 50% when it opens
+  React.useEffect(() => {
+    if (showDetailModal) {
+      setTimeout(() => {
+        detailModalRef.current?.snapToPoint?.('half');
+      }, 100);
+    }
+  }, [showDetailModal]);
 
   React.useEffect(() => {
     (async () => {
@@ -70,8 +86,9 @@ function MapScreenInner() {
     maxLon: region.longitude + region.longitudeDelta / 2,
   });
 
-  const handleRegionChange = (newRegion: any) => {
+  const handleRegionChangeComplete = (newRegion: any) => {
     setRegion(newRegion);
+    // Update bounds only after user finishes panning/zooming for better performance
     updateBounds({
       minLat: newRegion.latitude - newRegion.latitudeDelta / 2,
       maxLat: newRegion.latitude + newRegion.latitudeDelta / 2,
@@ -80,50 +97,99 @@ function MapScreenInner() {
     });
   };
 
+  const toggleMapType = () => {
+    setMapType((prev) => (prev === 'standard' ? 'satellite' : 'standard'));
+  };
+
+  const toggleRouteMode = () => {
+    setRouteMode((prev) => {
+      if (prev === 'hidden') return 'secondary';
+      if (prev === 'secondary') return 'colored';
+      return 'hidden';
+    });
+  };
+
+  // Calculate dynamic stroke width based on zoom level
+  const baseStrokeWidth = useMemo(() => {
+    return getStrokeWidthForZoom(region.latitudeDelta);
+  }, [region.latitudeDelta]);
+
+  // Cluster stations based on zoom level
+  const stationClusters = useMemo(() => {
+    return clusterStations(stations, region.latitudeDelta);
+  }, [stations, region.latitudeDelta]);
+
   return (
     <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={styles.map}
+        mapType={mapType}
         initialRegion={region}
         showsUserLocation={true}
         showsTraffic={false}
         showsIndoors={true}
         userLocationAnnotationTitle="Your Location"
         provider={PROVIDER_DEFAULT}
-        onRegionChange={handleRegionChange}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {visibleShapes.map((shape) => (
-          <Polyline
-            key={shape.id}
-            coordinates={shape.coordinates}
-            strokeColor={AppColors.primary}
-            strokeWidth={2}
-            lineCap="round"
-            lineJoin="round"
-          />
-        ))}
+        {routeMode !== 'hidden' && visibleShapes.map((shape) => {
+          const colorScheme = routeMode === 'colored'
+            ? getColoredRouteColor(shape.id)
+            : getRouteColor(shape.id);
+          return (
+            <Polyline
+              key={shape.id}
+              coordinates={shape.coordinates}
+              strokeColor={colorScheme.stroke}
+              strokeWidth={Math.max(2, baseStrokeWidth)}
+              lineCap="round"
+              lineJoin="round"
+              geodesic={true}
+            />
+          );
+        })}
 
-        {stations.map((station) => {
-          const isSelected = selectedStation === station.id;
+        {stationClusters.map((cluster) => {
+          const isSelected = !cluster.isCluster && selectedStation === cluster.id;
           return (
             <Marker
-              key={station.id}
-              coordinate={{ latitude: station.lat, longitude: station.lon }}
-              title={station.name}
-              description={station.id}
-              onPress={() => setSelectedStation(station.id)}
+              key={cluster.id}
+              coordinate={{ latitude: cluster.lat, longitude: cluster.lon }}
+              title={cluster.isCluster ? `${cluster.stations.length} stations` : cluster.stations[0].name}
+              description={cluster.isCluster ? cluster.stations.map(s => s.name).join(', ') : cluster.stations[0].id}
+              onPress={() => !cluster.isCluster && setSelectedStation(cluster.id)}
+              anchor={{ x: 0.5, y: 0.5 }}
             >
               <Animated.View
                 style={{
                   transform: [{ scale: isSelected ? markerScale : 1 }],
+                  alignItems: 'center',
                 }}
               >
                 <Ionicons
                   name="location"
                   size={24}
-                  color={isSelected ? '#FFFFFF' : AppColors.primary}
+                  color={isSelected ? AppColors.accentBlue : AppColors.primary}
                 />
+                <Text
+                  style={{
+                    color: AppColors.primary,
+                    fontSize: cluster.isCluster ? 10 : 9,
+                    fontWeight: '600',
+                    marginTop: -4,
+                    textAlign: 'center',
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    paddingHorizontal: 4,
+                    paddingVertical: 1,
+                    borderRadius: 3,
+                  }}
+                  numberOfLines={1}
+                >
+                  {cluster.isCluster
+                    ? `${cluster.stations.length}+`
+                    : getStationAbbreviation(cluster.stations[0].id, cluster.stations[0].name)}
+                </Text>
               </Animated.View>
             </Marker>
           );
@@ -144,6 +210,42 @@ function MapScreenInner() {
           )
         ))}
       </MapView>
+
+      <TouchableOpacity
+        style={[styles.mapTypeButton, { top: insets.top + 16 }]}
+        onPress={toggleMapType}
+        activeOpacity={0.7}
+      >
+        {mapType === 'standard' ? (
+          <MaterialIcons
+            name="satellite-alt"
+            size={24}
+            color={AppColors.primary}
+          />
+        ) : (
+          <Ionicons
+            name="map"
+            size={24}
+            color={AppColors.primary}
+          />
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.routeToggleButton, { top: insets.top + 16 }]}
+        onPress={toggleRouteMode}
+        activeOpacity={0.7}
+      >
+        {routeMode === 'hidden' && (
+          <MaterialIcons name="route" size={24} color={AppColors.tertiary} />
+        )}
+        {routeMode === 'secondary' && (
+          <MaterialIcons name="route" size={24} color={AppColors.primary} />
+        )}
+        {routeMode === 'colored' && (
+          <MaterialIcons name="route" size={24} color={AppColors.accentBlue} />
+        )}
+      </TouchableOpacity>
 
       <SlideUpModal ref={mainModalRef}>
         <ModalContent
@@ -169,20 +271,11 @@ function MapScreenInner() {
         />
       </SlideUpModal>
 
-      <Modal
-        visible={showDetailModal && !!selectedTrain}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowDetailModal(false)}
-      >
-        <View style={styles.detailModalOverlay}>
-          <BlurView intensity={40} style={styles.detailModalCard}>
-            {selectedTrain && (
-              <TrainDetailModal train={selectedTrain} onClose={() => setShowDetailModal(false)} />
-            )}
-          </BlurView>
-        </View>
-      </Modal>
+      {showDetailModal && selectedTrain && (
+        <SlideUpModal ref={detailModalRef}>
+          <TrainDetailModal train={selectedTrain} onClose={() => setShowDetailModal(false)} />
+        </SlideUpModal>
+      )}
     </View>
   );
 }
