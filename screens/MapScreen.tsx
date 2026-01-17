@@ -240,10 +240,15 @@ function MapScreenInner() {
             <Marker
               key={cluster.id}
               coordinate={{ latitude: cluster.lat, longitude: cluster.lon }}
-              title={cluster.isCluster ? `${cluster.stations.length} stations` : cluster.stations[0].name}
-              description={cluster.isCluster ? cluster.stations.map(s => s.name).join(', ') : cluster.stations[0].id}
               anchor={{ x: 0.5, y: 0.5 }}
-              tappable={false}
+              onPress={() => {
+                mapRef.current?.animateToRegion({
+                  latitude: cluster.lat,
+                  longitude: cluster.lon,
+                  latitudeDelta: 0.02,
+                  longitudeDelta: 0.02,
+                }, 500);
+              }}
             >
               <View style={{ alignItems: 'center' }}>
                 <Ionicons
