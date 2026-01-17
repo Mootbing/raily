@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { AppColors, BorderRadius, FontSizes, Spacing } from '../constants/theme';
 
 export const COLORS = AppColors;
@@ -9,12 +9,39 @@ export const styles = StyleSheet.create({
   map: { flex: 1 },
   detailModalContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2000 },
   detailModalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  detailModalCard: { borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, maxHeight: '80%', paddingBottom: Spacing.xl, paddingHorizontal: Spacing.xl, paddingTop: Spacing.lg, overflow: 'hidden' },
+  detailModalCard: { borderRadius: BorderRadius.xl, maxHeight: '80%', paddingBottom: Spacing.xl, paddingHorizontal: Spacing.xl, paddingTop: Spacing.lg, overflow: 'hidden', backgroundColor: Platform.select({ ios: 'rgba(20, 20, 25, 0.75)', android: 'rgba(20, 20, 25, 0.8)', default: 'rgba(20, 20, 25, 0.75)' }), borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 },
   scrollView: { flex: 1 },
+  stickyHeader: { 
+    backgroundColor: 'transparent', 
+    borderBottomWidth: 0, 
+    borderBottomColor: 'transparent',
+    // Extend background to card edges
+    marginHorizontal: -Spacing.xl,
+    paddingHorizontal: Spacing.xl,
+    // Provide top padding without negative margins to avoid layout issues
+    paddingTop: Spacing.lg,
+  },
+  stickyHeaderStuck: {
+    backgroundColor: COLORS.background.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border.primary,
+  },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
   title: { fontSize: FontSizes.title, fontWeight: 'bold', fontFamily: FONTS.family, color: COLORS.primary },
   titleCollapsed: { marginBottom: Spacing.sm },
-  refreshButton: { padding: 4, justifyContent: 'center', alignItems: 'center' },
+  refreshButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 20,
+    padding: 4,
+    width: 40,
+    height: 40,
+    backgroundColor: 'transparent',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   refreshIconSpinning: { opacity: 0.5 },
   subtitle: { fontSize: FontSizes.flightDate, fontFamily: FONTS.family, color: COLORS.secondary, marginTop: -Spacing.sm, marginBottom: Spacing.md },
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background.secondary, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, marginBottom: Spacing.xl, borderWidth: 1, borderColor: COLORS.border.secondary },
@@ -35,11 +62,11 @@ export const styles = StyleSheet.create({
   daysAway: { fontSize: FontSizes.daysAway, fontWeight: 'bold', fontFamily: FONTS.family, color: COLORS.primary, lineHeight: 36 },
   daysLabel: { fontSize: FontSizes.daysLabel, fontFamily: FONTS.family, color: COLORS.secondary, marginTop: Spacing.xs, letterSpacing: 0.5 },
   flightCenter: { flex: 1 },
-  flightHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm },
+  flightHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xs },
   amtrakLogo: { width: 16, height: 16, marginRight: 3, resizeMode: 'contain' },
   flightNumber: { fontSize: FontSizes.flightNumber, fontFamily: FONTS.family, color: COLORS.primary, fontWeight: '600', marginLeft: 3, marginRight: Spacing.md },
   flightDate: { fontSize: FontSizes.flightDate, fontFamily: FONTS.family, color: COLORS.secondary, marginLeft: 'auto' },
-  route: { fontSize: FontSizes.route, fontWeight: '600', fontFamily: FONTS.family, color: COLORS.primary, marginBottom: Spacing.md },
+  route: { fontSize: FontSizes.route, fontWeight: '600', fontFamily: FONTS.family, color: COLORS.primary, marginBottom: Spacing.sm },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
   timeInfo: { flexDirection: 'row', alignItems: 'center' },
   arrowIcon: { width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginRight: Spacing.sm },

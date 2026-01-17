@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import React, { useContext, useEffect, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -88,6 +89,7 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
   const [refreshStep, setRefreshStep] = useState('');
   const searchInputRef = React.useRef<TextInput>(null);
   const { items: frequentlyUsed, refresh: refreshFrequentlyUsed } = useFrequentlyUsed();
+  const [isHeaderStuck, setIsHeaderStuck] = useState(false);
 
   // Load saved trains from storage service
   useEffect(() => {
@@ -153,34 +155,48 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
         scrollEnabled={isFullscreen}
         onScroll={(e) => {
-          scrollOffset.value = e.nativeEvent.contentOffset.y;
+          const offsetY = e.nativeEvent.contentOffset.y;
+          scrollOffset.value = offsetY;
+          setIsHeaderStuck(offsetY > 0);
         }}
         scrollEventThrottle={16}
+        simultaneousHandlers={panGesture}
       >
-        <View>
+        <BlurView 
+          intensity={isHeaderStuck ? 80 : 0} 
+          tint="dark" 
+          style={[
+            styles.stickyHeader,
+            isHeaderStuck && styles.stickyHeaderStuck
+          ]}
+        >
           <View style={styles.titleRow}>
             <Text style={[styles.title, isCollapsed && styles.titleCollapsed]}>{isSearchFocused ? 'Add Train' : 'My Trains'}</Text>
-            {!isSearchFocused && (
-              <TouchableOpacity
-                onPress={handleRefresh}
-                disabled={isRefreshing}
-                style={styles.refreshButton}
-                activeOpacity={0.7}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel="Refresh train schedules"
-              >
-                <Ionicons 
-                  name="refresh" 
-                  size={24} 
-                  color={isRefreshing ? COLORS.secondary : COLORS.accentBlue}
-                  style={isRefreshing ? styles.refreshIconSpinning : undefined}
-                />
-              </TouchableOpacity>
-            )}
           </View>
+          {/* Absolutely positioned refresh button */}
+          {!isSearchFocused && (
+            <TouchableOpacity
+              onPress={handleRefresh}
+              disabled={isRefreshing}
+              style={styles.refreshButton}
+              activeOpacity={0.7}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh train schedules"
+            >
+              <Ionicons 
+                name="refresh" 
+                size={24} 
+                color={'#fff'}
+                style={isRefreshing ? styles.refreshIconSpinning : undefined}
+              />
+            </TouchableOpacity>
+          )}
+        </BlurView>
+        <View>
           {isRefreshing && (
             <View style={styles.progressContainer}>
               <View style={styles.progressHeader}>
@@ -196,7 +212,7 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
           {isSearchFocused && (
             <Text style={styles.subtitle}>Add any amtrak train (for now)</Text>
           )}
-          
+
           {!isRefreshing && (
             <SearchBar
               isSearchFocused={isSearchFocused}

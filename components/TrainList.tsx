@@ -4,7 +4,7 @@ import { Image, Text, TouchableOpacity, View } from 'react-native';
 import { COLORS, styles } from '../screens/styles';
 import type { Train } from '../types/train';
 
-function parseTimeToDate(timeStr: string, baseDate: Date): Date {
+export function parseTimeToDate(timeStr: string, baseDate: Date): Date {
   const [time, meridian] = timeStr.split(' ');
   const [hStr, mStr] = time.split(':');
   let hours = parseInt(hStr, 10);
@@ -17,7 +17,7 @@ function parseTimeToDate(timeStr: string, baseDate: Date): Date {
   return d;
 }
 
-function getCountdownForTrain(train: Train): { value: number; unit: 'DAYS' | 'HOURS' | 'MINUTES' | 'SECONDS'; past: boolean } {
+export function getCountdownForTrain(train: Train): { value: number; unit: 'DAYS' | 'HOURS' | 'MINUTES' | 'SECONDS'; past: boolean } {
   if (train.daysAway && train.daysAway > 0) {
     return { value: Math.round(train.daysAway), unit: 'DAYS', past: false };
   }

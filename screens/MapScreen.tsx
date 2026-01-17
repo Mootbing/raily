@@ -125,7 +125,7 @@ export default function MapScreen() {
         onRequestClose={() => setShowDetailModal(false)}
       >
         <View style={styles.detailModalOverlay}>
-          <BlurView intensity={30} tint="dark" style={styles.detailModalCard}>
+          <BlurView intensity={40} style={styles.detailModalCard}>
             {selectedTrain && (
               <TrainDetailModal train={selectedTrain} onClose={() => setShowDetailModal(false)} />
             )}

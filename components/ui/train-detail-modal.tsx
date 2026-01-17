@@ -1,8 +1,10 @@
+
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AppColors, Spacing } from '../../constants/theme';
 import type { Train } from '../../types/train';
+import { getCountdownForTrain } from '../TrainList';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -56,27 +58,40 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
   // Detail modal is rendered outside SlideUpModal; use a simple scroll container without gestures.
   const isFullscreen = true;
   const isCollapsed = false;
+  const [isHeaderStuck, setIsHeaderStuck] = React.useState(false);
   const scrollOffset = { value: 0 } as any;
   const panGesture = null;
   
   // Calculate journey duration from departure to arrival
   const duration = calculateDuration(train.departTime, train.arriveTime);
-  
+
   // Estimate mileage based on number of stops (rough estimate: ~40-50 miles per stop segment)
   const estimatedMiles = Math.round(((train.intermediateStops?.length || 0) + 1) * 45);
-  
+
+  // Countdown logic (shared with TrainList)
+  const countdown = getCountdownForTrain(train);
+  const unitLabel = `${countdown.unit}${countdown.past ? ' AGO' : ''}`;
+
   return (
     <ScrollView 
       style={styles.modalContent} 
       scrollEnabled={isFullscreen} 
       showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={[0]}
       onScroll={(e) => {
-        scrollOffset.value = e.nativeEvent.contentOffset.y;
+        const offsetY = e.nativeEvent.contentOffset.y;
+        scrollOffset.value = offsetY;
+        setIsHeaderStuck(offsetY > 0);
       }}
       scrollEventThrottle={16}
     >
         {/* Header */}
-        <View style={[styles.header, isCollapsed && styles.headerCollapsed]}>
+        <View style={[
+          styles.header,
+          isCollapsed && styles.headerCollapsed,
+          styles.headerStuck
+        ]}>
+          {/* BlurView removed: solid background only */}
           <View style={styles.headerContent}>
             <Image
               source={require('../../assets/images/amtrak.png')}
@@ -88,23 +103,29 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
                 <Text style={styles.headerTitle}>
                   {train.airline} {train.flightNumber} • {train.date}
                 </Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.6}>
-                  <Ionicons name="close" size={24} color={COLORS.primary} />
-                </TouchableOpacity>
               </View>
               <Text style={styles.routeTitle}>
                 {train.from} to {train.to}
               </Text>
             </View>
           </View>
+          {/* Absolutely positioned close button */}
+          <TouchableOpacity onPress={onClose} style={styles.absoluteCloseButton} activeOpacity={0.6}>
+            <Ionicons name="close" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
 
         {/* Collapsed: only header visible */}
         {!isCollapsed && (
           <>
-            {/* Departs in */}
+            {/* Departs in (granular, like card) */}
             <View style={styles.departsSection}>
-              <Text style={styles.departsText}>Departs in {train.daysAway} days</Text>
+              <Text style={[styles.departsText, { color: COLORS.secondary }]}>
+                {countdown.past ? 'Departed ' : 'Departs in '}
+                <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>{countdown.value}</Text>
+                {' '}
+                <Text style={{ color: COLORS.secondary }}>{unitLabel.toLowerCase()}</Text>
+              </Text>
             </View>
             <View style={styles.fullWidthLine} />
 
@@ -185,8 +206,15 @@ const styles = StyleSheet.create({
   header: {
     padding: Spacing.xl,
     paddingTop: Spacing.lg,
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+    backgroundColor: 'transparent',
+    zIndex: 10,
+  },
+  headerStuck: {
     borderBottomWidth: 1,
     borderBottomColor: COLORS.tertiary,
+    backgroundColor: COLORS.background.primary,
   },
   headerCollapsed: {
     padding: Spacing.lg,
@@ -209,7 +237,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 0,
   },
   headerTitle: {
     fontSize: 14,
@@ -224,11 +252,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  absoluteCloseButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 20,
+    padding: 4,
+    width: 40,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   routeTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     fontFamily: FONTS.family,
-    color: COLORS.primary
+    color: COLORS.primary,
+    marginTop: 0,
   },
   departsSection: {
     paddingTop: 16,
@@ -242,8 +284,9 @@ const styles = StyleSheet.create({
   },
   fullWidthLine: {
     width: '100%',
-    height: 1,
-    backgroundColor: COLORS.tertiary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.tertiary,
+    backgroundColor: 'transparent',
     marginBottom: 16,
   },
   infoSection: {

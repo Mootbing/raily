@@ -8,18 +8,18 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system/legacy';
+import { Directory, File, Paths } from 'expo-file-system';
 import { strFromU8, unzipSync } from 'fflate';
 import type { Route, Shape, Stop, StopTime } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
 
 const GTFS_URL = 'https://content.amtrak.com/content/gtfs/GTFS.zip';
-const GTFS_CACHE_DIR = `${FileSystem.documentDirectory}gtfs-cache/`;
+const GTFS_CACHE_DIR = 'gtfs-cache';
 const GTFS_FILES = {
-  routes: `${GTFS_CACHE_DIR}routes.json`,
-  stops: `${GTFS_CACHE_DIR}stops.json`,
-  stopTimes: `${GTFS_CACHE_DIR}stop_times.json`,
-  shapes: `${GTFS_CACHE_DIR}shapes.json`,
+  routes: 'routes.json',
+  stops: 'stops.json',
+  stopTimes: 'stop_times.json',
+  shapes: 'shapes.json',
 };
 
 const STORAGE_KEYS = {
@@ -42,25 +42,27 @@ function safeJSONParse<T>(text: string | null): T | null {
 }
 
 async function ensureCacheDir() {
-  const info = await FileSystem.getInfoAsync(GTFS_CACHE_DIR);
-  if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(GTFS_CACHE_DIR, { intermediates: true });
+  const cacheDir = new Directory(Paths.document, GTFS_CACHE_DIR);
+  if (!(await cacheDir.exists())) {
+    await cacheDir.create();
   }
 }
 
-async function readJSONFromFile<T>(path: string): Promise<T | null> {
+async function readJSONFromFile<T>(filename: string): Promise<T | null> {
   try {
-    const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists) return null;
-    const content = await FileSystem.readAsStringAsync(path);
+    const file = new File(Paths.document, GTFS_CACHE_DIR, filename);
+    if (!(await file.exists())) return null;
+    const content = await file.text();
     return JSON.parse(content) as T;
   } catch {
     return null;
   }
 }
 
-async function writeJSONToFile(path: string, data: unknown) {
-  await FileSystem.writeAsStringAsync(path, JSON.stringify(data));
+async function writeJSONToFile(filename: string, data: unknown) {
+  const file = new File(Paths.document, GTFS_CACHE_DIR, filename);
+  await file.create({ overwrite: true });
+  await file.write(JSON.stringify(data));
 }
 
 // Basic CSV parser that respects quoted fields
