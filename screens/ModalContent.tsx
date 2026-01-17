@@ -8,7 +8,6 @@ import { SearchBar } from '../components/SearchBar';
 import { TrainList } from '../components/TrainList';
 import { SlideUpModalContext } from '../components/ui/slide-up-modal';
 import { useTrainContext } from '../context/TrainContext';
-import { DEFAULT_TRAIN } from '../fixtures/trains';
 import { useFrequentlyUsed } from '../hooks/useFrequentlyUsed';
 import { TrainAPIService } from '../services/api';
 import { ensureFreshGTFS } from '../services/gtfs-sync';
@@ -94,12 +93,13 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
 
   // Load saved trains from storage service
   useEffect(() => {
+    const { DEFAULT_TRAIN, SAMPLE_TRAINS } = require('../fixtures/trains');
     const loadSavedTrains = async () => {
       const trains = await TrainStorageService.getSavedTrains();
       if (trains.length === 0) {
-        // Initialize with default train
-        await TrainStorageService.initializeWithDefaults([DEFAULT_TRAIN]);
-        setSavedTrains([DEFAULT_TRAIN]);
+        // Initialize with several default trains
+        await TrainStorageService.initializeWithDefaults(SAMPLE_TRAINS);
+        setSavedTrains(SAMPLE_TRAINS);
       } else {
         setSavedTrains(trains);
       }
