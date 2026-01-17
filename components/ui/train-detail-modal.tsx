@@ -177,9 +177,8 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
     >
         {/* Header */}
         <View style={[
-          styles.header,
-          isCollapsed && styles.headerCollapsed,
-          styles.headerStuck
+          styles.header
+          // styles.headerStuck
         ]}>
           {/* BlurView removed: solid background only */}
           <View style={styles.headerContent}>
@@ -209,6 +208,7 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
         {!isCollapsed && (
           <>
             {/* Departs in (granular, like card) */}
+            {countdown &&  <View style={styles.fullWidthLine} />}
             {countdown && (
               <View style={styles.departsSection}>
                 <Text style={[styles.departsText, { color: COLORS.secondary }]}>
@@ -301,20 +301,11 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: Spacing.xl,
-    paddingTop: Spacing.lg,
+    paddingTop: -Spacing.md,
     borderBottomWidth: 0,
     borderBottomColor: 'transparent',
     backgroundColor: 'transparent',
     zIndex: 10,
-  },
-  headerStuck: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.tertiary,
-    backgroundColor: COLORS.background.primary,
-  },
-  headerCollapsed: {
-    padding: Spacing.lg,
-    paddingTop: Spacing.md,
   },
   headerContent: {
     flexDirection: 'row',
@@ -372,10 +363,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: FONTS.family,
     color: COLORS.primary,
+    marginRight: 75,
     marginTop: 0,
   },
   departsSection: {
-    paddingTop: 16,
     paddingBottom: 12,
     paddingHorizontal: 20,
   },

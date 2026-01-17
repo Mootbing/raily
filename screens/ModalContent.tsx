@@ -35,14 +35,17 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
   // Track if initialization has run
   const hasInitialized = useRef(false);
 
-  // Load saved trains from storage service
+  // Load saved trains from storage service (after GTFS is loaded)
   useEffect(() => {
+    // Only load trains after GTFS data is ready
+    if (isLoading) return;
+
     const loadSavedTrains = async () => {
       const trains = await TrainStorageService.getSavedTrains();
       setSavedTrains(trains);
     };
     loadSavedTrains();
-  }, [setSavedTrains]);
+  }, [setSavedTrains, isLoading]);
 
   // Disable modal resizing when loading or refreshing GTFS data
   useEffect(() => {

@@ -1,12 +1,12 @@
-import React, { useRef, useMemo } from 'react';
-import { View, Text } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
-import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import React, { useMemo, useRef } from 'react';
+import { Text, View } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MapSettingsPill, { MapType, RouteMode, StationMode, TrainMode } from '../components/map/MapSettingsPill';
 import SlideUpModal from '../components/ui/slide-up-modal';
 import TrainDetailModal from '../components/ui/train-detail-modal';
-import MapSettingsPill, { RouteMode, StationMode, TrainMode, MapType } from '../components/map/MapSettingsPill';
 import { AppColors } from '../constants/theme';
 import { TrainProvider, useTrainContext } from '../context/TrainContext';
 import { useRealtime } from '../hooks/useRealtime';
@@ -15,7 +15,7 @@ import { TrainAPIService } from '../services/api';
 import { TrainStorageService } from '../services/storage';
 import type { Train } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
-import { getRouteColor, getColoredRouteColor, getStrokeWidthForZoom, getColoredRouteColor as getTrainMarkerColor } from '../utils/route-colors';
+import { getColoredRouteColor, getRouteColor, getStrokeWidthForZoom, getColoredRouteColor as getTrainMarkerColor } from '../utils/route-colors';
 import { clusterStations, getStationAbbreviation } from '../utils/station-clustering';
 import { ModalContent } from './ModalContent';
 import { styles } from './styles';
@@ -108,7 +108,26 @@ function MapScreenInner() {
     })();
   }, []);
 
+  // Track when GTFS data is loaded
+  const [gtfsLoaded, setGtfsLoaded] = React.useState(gtfsParser.isLoaded);
+
+  // Poll for GTFS loaded state
   React.useEffect(() => {
+    if (gtfsLoaded) return;
+
+    const interval = setInterval(() => {
+      if (gtfsParser.isLoaded) {
+        setGtfsLoaded(true);
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [gtfsLoaded]);
+
+  // Load stations and trains after GTFS is ready
+  React.useEffect(() => {
+    if (!gtfsLoaded) return;
+
     (async () => {
       const trains = await TrainStorageService.getSavedTrains();
       const trainsWithRealtime = await Promise.all(
@@ -119,7 +138,7 @@ function MapScreenInner() {
       const allStops = gtfsParser.getAllStops();
       setStations(allStops.map(stop => ({ id: stop.stop_id, name: stop.stop_name, lat: stop.stop_lat, lon: stop.stop_lon })));
     })();
-  }, [setSavedTrains]);
+  }, [setSavedTrains, gtfsLoaded]);
 
   useRealtime(savedTrains, setSavedTrains, 20000);
 
@@ -291,7 +310,7 @@ function MapScreenInner() {
       />
 
       {/* Main modal - My Trains list (always rendered, slides in/out) */}
-      <SlideUpModal ref={mainModalRef} onDismiss={handleMainModalDismissed}>
+      <SlideUpModal ref={mainModalRef} minSnapPercent={0.35} onDismiss={handleMainModalDismissed}>
         <ModalContent
           onTrainSelect={(trainOrStation) => {
             // If it's a train, animate out main modal then show details
@@ -315,7 +334,7 @@ function MapScreenInner() {
       {showDetailModal && selectedTrain && (
         <SlideUpModal
           ref={detailModalRef}
-          minSnapPercent={0.25}
+          minSnapPercent={0.15}
           initialSnap="max"
           onDismiss={handleDetailModalDismissed}
         >
