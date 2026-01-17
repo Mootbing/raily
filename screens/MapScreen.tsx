@@ -25,12 +25,12 @@ function MapScreenInner() {
   const detailModalRef = useRef<any>(null);
   const [showDetailModal, setShowDetailModal] = React.useState(false);
   const [stations, setStations] = React.useState<Array<{ id: string; name: string; lat: number; lon: number }>>([]);
-  const [region, setRegion] = React.useState({
-    latitude: 37.78825,
-    longitude: -122.4324,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
+  const [region, setRegion] = React.useState<{
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  } | null>(null);
   const [mapType, setMapType] = React.useState<MapType>('standard');
   const [routeMode, setRouteMode] = React.useState<RouteMode>('secondary');
   const [stationMode, setStationMode] = React.useState<StationMode>('auto');
@@ -66,6 +66,41 @@ function MapScreenInner() {
       }, 100);
     }
   }, [showDetailModal]);
+
+  // Get user location on mount
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const location = await Location.getCurrentPositionAsync({});
+          setRegion({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+          });
+        } else {
+          // Fallback to San Francisco if permission denied
+          setRegion({
+            latitude: 37.78825,
+            longitude: -122.4324,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+          });
+        }
+      } catch (error) {
+        console.error('Error getting initial location:', error);
+        // Fallback to San Francisco on error
+        setRegion({
+          latitude: 37.78825,
+          longitude: -122.4324,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        });
+      }
+    })();
+  }, []);
 
   React.useEffect(() => {
     (async () => {
@@ -108,8 +143,8 @@ function MapScreenInner() {
 
   // Calculate dynamic stroke width based on zoom level
   const baseStrokeWidth = useMemo(() => {
-    return getStrokeWidthForZoom(region.latitudeDelta);
-  }, [region.latitudeDelta]);
+    return getStrokeWidthForZoom(region?.latitudeDelta ?? 0.0922);
+  }, [region?.latitudeDelta]);
 
   // Cluster stations based on zoom level and station mode
   const stationClusters = useMemo(() => {
@@ -125,8 +160,17 @@ function MapScreenInner() {
       }));
     }
     // 'auto' mode - use clustering
-    return clusterStations(stations, region.latitudeDelta);
-  }, [stations, region.latitudeDelta, stationMode]);
+    return clusterStations(stations, region?.latitudeDelta ?? 0.0922);
+  }, [stations, region?.latitudeDelta, stationMode]);
+
+  // Don't render until we have a region
+  if (!region) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: AppColors.primary }}>Loading map...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

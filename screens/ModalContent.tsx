@@ -252,6 +252,12 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
     snapToPoint?.('min');
   };
 
+  const handleDeleteTrain = async (train: Train) => {
+    await TrainStorageService.deleteTrainByTripId(train.tripId || '', train.fromCode, train.toCode);
+    const updatedTrains = await TrainStorageService.getSavedTrains();
+    setSavedTrains(updatedTrains);
+  };
+
   return (
     <View style={{ flex: 1 }}>
       {/* Fixed Header */}
@@ -342,10 +348,14 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
           />
         )}
         {!isSearchFocused && !isLoading && (
-          <TrainList flights={flights} onTrainSelect={(train) => {
-            setSelectedTrain(train);
-            if (typeof onTrainSelect === 'function') onTrainSelect(train);
-          }} />
+          <TrainList
+            flights={flights}
+            onTrainSelect={(train) => {
+              setSelectedTrain(train);
+              if (typeof onTrainSelect === 'function') onTrainSelect(train);
+            }}
+            onDeleteTrain={handleDeleteTrain}
+          />
         )}
       </ScrollView>
     </View>
