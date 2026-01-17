@@ -88,6 +88,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState(0);
   const [refreshStep, setRefreshStep] = useState('');
+  const [refreshPhases, setRefreshPhases] = useState<string[]>([]);
   const searchInputRef = React.useRef<TextInput>(null);
   const { items: frequentlyUsed, refresh: refreshFrequentlyUsed } = useFrequentlyUsed();
   const [isHeaderStuck, setIsHeaderStuck] = useState(false);
@@ -131,9 +132,17 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
     setIsSearchFocused(false); // Hide search bar
     snapToPoint?.('min'); // Collapse to 35%
     try {
+      setRefreshPhases([]);
       const result = await ensureFreshGTFS((update) => {
         setRefreshProgress(update.progress);
         setRefreshStep(update.step + (update.detail ? ` • ${update.detail}` : ''));
+        setRefreshPhases(prev => {
+          // Only add if not already present as last
+          if (prev.length === 0 || prev[prev.length - 1] !== update.step) {
+            return [...prev, update.step];
+          }
+          return prev;
+        });
       });
       if (result.usedCache) {
         setIsRefreshing(false);
@@ -150,10 +159,12 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
       await refreshFrequentlyUsed();
       setRefreshProgress(1);
       setRefreshStep('Refresh complete');
+      setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh complete' ? prev : [...prev, 'Refresh complete']);
       Alert.alert('Refresh Complete', 'GTFS data has been refreshed successfully.');
     } catch (error) {
       console.error('Manual refresh failed:', error);
       setRefreshStep('Refresh failed');
+      setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh failed' ? prev : [...prev, 'Refresh failed']);
       Alert.alert('Refresh Failed', 'An error occurred while refreshing GTFS data.');
     } finally {
       setIsRefreshing(false);
@@ -167,19 +178,28 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
     setIsSearchFocused(false);
     snapToPoint?.('min');
     try {
+      setRefreshPhases([]);
       // Force refresh by clearing last fetch
       await AsyncStorage.removeItem('GTFS_LAST_FETCH');
       await ensureFreshGTFS((update) => {
         setRefreshProgress(update.progress);
         setRefreshStep(update.step + (update.detail ? ` • ${update.detail}` : ''));
+        setRefreshPhases(prev => {
+          if (prev.length === 0 || prev[prev.length - 1] !== update.step) {
+            return [...prev, update.step];
+          }
+          return prev;
+        });
       });
       await refreshFrequentlyUsed();
       setRefreshProgress(1);
       setRefreshStep('Refresh complete');
+      setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh complete' ? prev : [...prev, 'Refresh complete']);
       Alert.alert('Refresh Complete', 'GTFS data has been refreshed successfully.');
     } catch (error) {
       console.error('Manual refresh failed:', error);
       setRefreshStep('Refresh failed');
+      setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh failed' ? prev : [...prev, 'Refresh failed']);
       Alert.alert('Refresh Failed', 'An error occurred while refreshing GTFS data.');
     } finally {
       setIsRefreshing(false);
@@ -248,11 +268,18 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 32 }}>
               <Ionicons name="train" size={40} color={COLORS.secondary} style={{ marginBottom: 16 }} />
               <View style={{ width: 220, alignItems: 'center' }}>
-                <Text style={[styles.noTrainsText, { marginBottom: 8 }]}>Refreshing schedules</Text>
+                <Text
+                  style={[styles.noTrainsText, { marginBottom: 8 }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {`Refreshing GTFS · ${refreshStep.replace(/\s*•.*/, '')}`}
+                </Text>
                 <View style={{ width: '100%', height: 5, backgroundColor: COLORS.border.secondary, borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
                   <View style={{ height: '100%', backgroundColor: COLORS.accentBlue, borderRadius: 999, width: `${Math.max(5, refreshProgress * 100)}%` }} />
                 </View>
-                <Text style={[styles.progressValue, { marginBottom: 2 }]}>{Math.round(refreshProgress * 100)}%</Text>
+                <Text style={[styles.progressValue, { marginBottom: 12 }]}>{Math.round(refreshProgress * 100)}%</Text>
+                {/* Only show current stage, not all phases */}
               </View>
             </View>
           )}
