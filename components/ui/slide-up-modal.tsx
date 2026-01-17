@@ -1,6 +1,6 @@
 import { BlurView } from 'expo-blur';
 import React, { createContext, useEffect, useState } from 'react';
-import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import { Dimensions, Platform, StatusBar, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     runOnJS,
@@ -46,7 +46,8 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   const screenHeight = Dimensions.get('screen').height;
   const windowHeight = Dimensions.get('window').height;
   const safeAreaBottomInset = screenHeight - windowHeight;
-  const safeAreaTopInset = 0; // Top inset is handled by status bar, we'll use margin to extend
+  // Get status bar height to extend modal to true top of screen
+  const statusBarHeight = StatusBar.currentHeight || 0;
   
   const translateY = useSharedValue(SCREEN_HEIGHT - SNAP_POINTS.HALF);
   const context = useSharedValue({ y: 0 });
@@ -67,39 +68,6 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
       stiffness: 200,
     });
   }, []);
-
-  const snapToClosest = (currentY: number) => {
-    'worklet';
-    const modalHeightValue = SCREEN_HEIGHT - currentY;
-    
-    // Calculate distances to each snap point
-    const distances = [
-      { point: SNAP_POINTS.MIN, distance: Math.abs(modalHeightValue - SNAP_POINTS.MIN), key: 'min' as const },
-      { point: SNAP_POINTS.HALF, distance: Math.abs(modalHeightValue - SNAP_POINTS.HALF), key: 'half' as const },
-      { point: SNAP_POINTS.MAX, distance: Math.abs(modalHeightValue - SNAP_POINTS.MAX), key: 'max' as const },
-    ];
-    
-    // Find closest snap point
-    const closest = distances.reduce((prev, curr) => 
-      curr.distance < prev.distance ? curr : prev
-    );
-    
-    currentSnap.value = closest.key;
-    modalHeight.value = closest.point;
-    
-    if (onSnapChange) {
-      runOnJS(onSnapChange)(closest.key);
-    }
-    
-    if (onHeightChange) {
-      runOnJS(onHeightChange)(closest.point);
-    }
-    
-    runOnJS(setIsFullscreen)(closest.key === 'max');
-    runOnJS(setIsCollapsed)(closest.key === 'min');
-    
-    return SCREEN_HEIGHT - closest.point;
-  };
 
   const snapToPoint = (point: 'min' | 'half' | 'max') => {
     const snapPoint = point === 'min' ? SNAP_POINTS.MIN : point === 'half' ? SNAP_POINTS.HALF : SNAP_POINTS.MAX;
@@ -126,15 +94,18 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   };
 
   const panGesture = Gesture.Pan()
+    .enableTrackpadTwoFingerGesture(true)
+    .maxPointers(1)
     .onStart(() => {
       context.value = { y: translateY.value };
     })
     .onUpdate((event) => {
-      // When content is scrolled, let ScrollView handle gestures until at top
+      // At fullscreen, only handle gesture if scrolled to top
       if (currentSnap.value === 'max' && scrollOffset.value > 0) {
         return;
       }
-      // Limit dragging within bounds
+
+      // Update position within bounds
       const newY = context.value.y + event.translationY;
       translateY.value = Math.max(
         SCREEN_HEIGHT - SNAP_POINTS.MAX,
@@ -142,34 +113,62 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
       );
     })
     .onEnd((event) => {
-      // If at top of scroll and the user dragged down, collapse to MIN
-      const atTop = scrollOffset.value <= 10;
-      const draggedDown = (event?.translationY ?? 0) > 30 || (event?.velocityY ?? 0) > 800;
-      if (atTop && draggedDown) {
-        const targetY = SCREEN_HEIGHT - SNAP_POINTS.MIN;
-        currentSnap.value = 'min';
-        modalHeight.value = SNAP_POINTS.MIN;
-        runOnJS(setIsFullscreen)(false);
-        runOnJS(setIsCollapsed)(true);
-        translateY.value = withSpring(targetY, {
-          damping: 50,
-          stiffness: 200,
-        });
-        if (onSnapChange) {
-          runOnJS(onSnapChange)('min');
-        }
-        if (onHeightChange) {
-          runOnJS(onHeightChange)(SNAP_POINTS.MIN);
-        }
-        return;
+      const velocity = event.velocityY;
+      const currentY = translateY.value;
+      const currentHeight = SCREEN_HEIGHT - currentY;
+
+      // Quick swipe detection (velocity-based)
+      const QUICK_SWIPE_VELOCITY = 1000;
+      const isQuickSwipeUp = velocity < -QUICK_SWIPE_VELOCITY;
+      const isQuickSwipeDown = velocity > QUICK_SWIPE_VELOCITY;
+
+      let targetSnap: 'min' | 'half' | 'max';
+
+      if (isQuickSwipeUp) {
+        // Quick swipe up -> fullscreen
+        targetSnap = 'max';
+      } else if (isQuickSwipeDown) {
+        // Quick swipe down -> collapse
+        targetSnap = 'min';
+      } else {
+        // Careful/slow swipe -> snap to closest
+        const distances = [
+          { point: SNAP_POINTS.MIN, distance: Math.abs(currentHeight - SNAP_POINTS.MIN), key: 'min' as const },
+          { point: SNAP_POINTS.HALF, distance: Math.abs(currentHeight - SNAP_POINTS.HALF), key: 'half' as const },
+          { point: SNAP_POINTS.MAX, distance: Math.abs(currentHeight - SNAP_POINTS.MAX), key: 'max' as const },
+        ];
+
+        const closest = distances.reduce((prev, curr) =>
+          curr.distance < prev.distance ? curr : prev
+        );
+
+        targetSnap = closest.key;
       }
-      
-      const snapPoint = snapToClosest(translateY.value);
-      translateY.value = withSpring(snapPoint, {
+
+      // Apply the snap
+      const targetHeight = SNAP_POINTS[targetSnap.toUpperCase() as 'MIN' | 'HALF' | 'MAX'];
+      const targetY = SCREEN_HEIGHT - targetHeight;
+
+      currentSnap.value = targetSnap;
+      modalHeight.value = targetHeight;
+
+      runOnJS(setIsFullscreen)(targetSnap === 'max');
+      runOnJS(setIsCollapsed)(targetSnap === 'min');
+
+      if (onSnapChange) {
+        runOnJS(onSnapChange)(targetSnap);
+      }
+
+      if (onHeightChange) {
+        runOnJS(onHeightChange)(targetHeight);
+      }
+
+      translateY.value = withSpring(targetY, {
         damping: 50,
         stiffness: 200,
       });
-    });
+    })
+    .simultaneousWithExternalGesture();
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -177,33 +176,86 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
     };
   });
 
+  const animatedBorderRadius = useAnimatedStyle(() => {
+    // Calculate current height of modal
+    const currentHeight = SCREEN_HEIGHT - translateY.value;
+
+    // Progress from HALF (50%) to MAX (95%)
+    const halfHeight = SNAP_POINTS.HALF;
+    const maxHeight = SNAP_POINTS.MAX;
+
+    // Calculate interpolation progress (0 at 50%, 1 at 95%)
+    const progress = Math.max(0, Math.min(1, (currentHeight - halfHeight) / (maxHeight - halfHeight)));
+
+    // Interpolate border radius from BorderRadius.xl (32) to 0
+    const radius = BorderRadius.xl * (1 - progress);
+
+    return {
+      borderTopLeftRadius: radius,
+      borderTopRightRadius: radius,
+    };
+  });
+
+  const animatedBackground = useAnimatedStyle(() => {
+    // Calculate current height of modal
+    const currentHeight = SCREEN_HEIGHT - translateY.value;
+
+    // Progress from HALF (50%) to MAX (95%)
+    const halfHeight = SNAP_POINTS.HALF;
+    const maxHeight = SNAP_POINTS.MAX;
+
+    // Calculate interpolation progress (0 at 50%, 1 at 95%)
+    const progress = Math.max(0, Math.min(1, (currentHeight - halfHeight) / (maxHeight - halfHeight)));
+
+    // Interpolate background opacity
+    // At 50%: rgba(20, 20, 25, 0.75) - semi-transparent
+    // At 95%: rgba(20, 20, 25, 1.0) - fully opaque (black)
+    const baseOpacity = Platform.OS === 'android' ? 0.8 : 0.75;
+    const targetOpacity = 1.0;
+    const opacity = baseOpacity + (targetOpacity - baseOpacity) * progress;
+
+    // Interpolate border opacity (fade out)
+    // At 50%: 1.0 (fully visible)
+    // At 95%: 0.0 (invisible)
+    const borderOpacity = 1 - progress;
+
+    return {
+      backgroundColor: `rgba(20, 20, 25, ${opacity})`,
+      borderColor: `rgba(255, 255, 255, ${0.15 * borderOpacity})`,
+      borderWidth: 1,
+    };
+  });
+
   return (
-    <Animated.View style={[styles.container, animatedStyle]}>
-      <SlideUpModalContext.Provider value={{ isFullscreen, isCollapsed, scrollOffset, panGesture, modalHeight, snapToPoint }}>
-        <BlurView
-          intensity={40}
-          style={[
-            styles.blurContainer,
-            isFullscreen && styles.blurContainerFullscreen,
-            isFullscreen && {
-              marginTop: -safeAreaTopInset,
-              marginBottom: -safeAreaBottomInset,
-            },
-            !isFullscreen && {
-              borderTopLeftRadius: BorderRadius.xl,
-              borderTopRightRadius: BorderRadius.xl,
-            },
-          ]}
-        >
-          <GestureDetector gesture={panGesture}>
-            <View style={[styles.content, isFullscreen && { paddingTop: safeAreaTopInset }]}>
-              <View style={styles.handleContainer} />
-              <View style={styles.childrenContainer}>{children}</View>
-            </View>
-          </GestureDetector>
-        </BlurView>
-      </SlideUpModalContext.Provider>
-    </Animated.View>
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={[styles.container, animatedStyle]}>
+        <SlideUpModalContext.Provider value={{ isFullscreen, isCollapsed, scrollOffset, panGesture, modalHeight, snapToPoint }}>
+          <Animated.View
+            style={[
+              styles.blurContainer,
+              animatedBorderRadius,
+              animatedBackground,
+              isFullscreen && styles.blurContainerFullscreen,
+              isFullscreen && {
+                // Extend to true top of screen (beyond status bar)
+                marginTop: -(statusBarHeight || 0),
+                marginBottom: -safeAreaBottomInset,
+              },
+            ]}
+          >
+            <BlurView
+              intensity={40}
+              style={StyleSheet.absoluteFill}
+            >
+              <Animated.View style={[styles.content, animatedBorderRadius, isFullscreen && { paddingTop: statusBarHeight || 0 }]}>
+                <View style={styles.handleContainer} />
+                <View style={styles.childrenContainer}>{children}</View>
+              </Animated.View>
+            </BlurView>
+          </Animated.View>
+        </SlideUpModalContext.Provider>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 );
@@ -220,13 +272,7 @@ const styles = StyleSheet.create({
   blurContainer: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: Platform.select({
-      ios: 'rgba(20, 20, 25, 0.75)',
-      android: 'rgba(20, 20, 25, 0.8)',
-      default: 'rgba(20, 20, 25, 0.75)',
-    }),
-    borderWidth: 1,
-    borderColor: AppColors.border.secondary,
+    // backgroundColor and borderColor are now animated
     borderBottomWidth: 0,
     shadowColor: AppColors.shadow,
     shadowOffset: {
@@ -245,8 +291,6 @@ const styles = StyleSheet.create({
   
   content: {
     flex: 1,
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
   },
   handleContainer: {
     width: '100%',

@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import React, { useContext, useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { FrequentlyUsedList } from '../components/FrequentlyUsedList';
 import { SearchBar } from '../components/SearchBar';
@@ -224,20 +223,19 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
   }, [isSearchFocused, searchQuery, isCollapsed, snapToPoint]);
 
   return (
-    <GestureDetector gesture={panGesture}>
-      <ScrollView 
-        style={styles.scrollView} 
-        showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[0]}
-        scrollEnabled={isFullscreen}
-        onScroll={(e) => {
-          const offsetY = e.nativeEvent.contentOffset.y;
-          scrollOffset.value = offsetY;
-          setIsHeaderStuck(offsetY > 0);
-        }}
-        scrollEventThrottle={16}
-        simultaneousHandlers={panGesture}
-      >
+    <ScrollView
+      style={styles.scrollView}
+      showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={[0]}
+      scrollEnabled={isFullscreen}
+      onScroll={(e) => {
+        const offsetY = e.nativeEvent.contentOffset.y;
+        scrollOffset.value = offsetY;
+        setIsHeaderStuck(offsetY > 0);
+      }}
+      scrollEventThrottle={16}
+      simultaneousHandlers={panGesture}
+    >
         <BlurView 
           intensity={isHeaderStuck ? 80 : 0} 
           tint="dark" 
@@ -362,7 +360,6 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
           }} />
         )}
       </ScrollView>
-    </GestureDetector>
   );
 }
 
