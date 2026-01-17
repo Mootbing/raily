@@ -11,20 +11,21 @@ export const styles = StyleSheet.create({
   detailModalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
   detailModalCard: { borderRadius: BorderRadius.xl, maxHeight: '80%', paddingBottom: Spacing.xl, paddingHorizontal: Spacing.xl, paddingTop: Spacing.lg, overflow: 'hidden', backgroundColor: Platform.select({ ios: 'rgba(20, 20, 25, 0.75)', android: 'rgba(20, 20, 25, 0.8)', default: 'rgba(20, 20, 25, 0.75)' }), borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 },
   scrollView: { flex: 1 },
-  stickyHeader: { 
-    backgroundColor: 'transparent', 
-    borderBottomWidth: 0, 
+  stickyHeader: {
+    backgroundColor: 'transparent',
+    borderBottomWidth: 0,
     borderBottomColor: 'transparent',
-    // Extend background to card edges
     marginHorizontal: -Spacing.xl,
     paddingHorizontal: Spacing.xl,
-    // Provide top padding without negative margins to avoid layout issues
     paddingTop: Spacing.lg,
   },
   stickyHeaderStuck: {
     backgroundColor: COLORS.background.primary,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border.primary,
+    marginHorizontal: -Spacing.xl,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
   title: { fontSize: FontSizes.title, fontWeight: 'bold', fontFamily: FONTS.family, color: COLORS.primary },

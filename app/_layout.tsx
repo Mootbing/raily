@@ -20,6 +20,7 @@ export default function RootLayout() {
       // Determine if we need to show loading (no cache or stale)
       const hasCache = await hasCachedGTFS();
       const stale = await isCacheStale();
+      console.log('[GTFS] Cached:', hasCache, '| Stale:', stale);
       setNeedsFetch(!hasCache || stale);
       const { usedCache } = await ensureFreshGTFS();
       if (mounted) setLoading(false);

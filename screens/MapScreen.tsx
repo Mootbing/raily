@@ -1,34 +1,33 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { Modal, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import SlideUpModal from '../components/ui/slide-up-modal';
 import TrainDetailModal from '../components/ui/train-detail-modal';
+import { TrainProvider, useTrainContext } from '../context/TrainContext';
 import { useRealtime } from '../hooks/useRealtime';
 import { useShapes } from '../hooks/useShapes';
 import { TrainAPIService } from '../services/api';
 import { TrainStorageService } from '../services/storage';
-import type { Train } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
-import ModalContent from './ModalContent';
+import { ModalContent } from './ModalContent';
 import { styles } from './styles';
 
-export default function MapScreen() {
+function MapScreenInner() {
   const mapRef = useRef<MapView>(null);
   const mainModalRef = useRef<any>(null);
-  const [selectedTrain, setSelectedTrain] = useState<any>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [stations, setStations] = useState<Array<{ id: string; name: string; lat: number; lon: number }>>([]);
-  const [savedTrains, setSavedTrains] = useState<Train[]>([]);
-  const [region, setRegion] = useState({
+  const [showDetailModal, setShowDetailModal] = React.useState(false);
+  const [stations, setStations] = React.useState<Array<{ id: string; name: string; lat: number; lon: number }>>([]);
+  const [region, setRegion] = React.useState({
     latitude: 37.78825,
     longitude: -122.4324,
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
+  const { savedTrains, setSavedTrains, selectedTrain, setSelectedTrain } = useTrainContext();
 
-  useEffect(() => {
+  React.useEffect(() => {
     (async () => {
       const trains = await TrainStorageService.getSavedTrains();
       const trainsWithRealtime = await Promise.all(
@@ -39,7 +38,7 @@ export default function MapScreen() {
       const allStops = gtfsParser.getAllStops();
       setStations(allStops.map(stop => ({ id: stop.stop_id, name: stop.stop_name, lat: stop.stop_lat, lon: stop.stop_lon })));
     })();
-  }, []);
+  }, [setSavedTrains]);
 
   useRealtime(savedTrains, setSavedTrains, 20000);
 
@@ -133,5 +132,13 @@ export default function MapScreen() {
         </View>
       </Modal>
     </View>
+  );
+}
+
+export default function MapScreen() {
+  return (
+    <TrainProvider>
+      <MapScreenInner />
+    </TrainProvider>
   );
 }

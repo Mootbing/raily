@@ -8,7 +8,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Directory, File, Paths } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import { strFromU8, unzipSync } from 'fflate';
 import type { Route, Shape, Stop, StopTime } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
@@ -41,18 +41,23 @@ function safeJSONParse<T>(text: string | null): T | null {
   try { return JSON.parse(text) as T; } catch { return null; }
 }
 
+
+// No-op: Directory.exists is not available in this environment; rely on AsyncStorage for cache
 async function ensureCacheDir() {
-  const cacheDir = new Directory(Paths.document, GTFS_CACHE_DIR);
-  if (!(await cacheDir.exists())) {
-    await cacheDir.create();
-  }
+  // No directory check needed; cache is in AsyncStorage
 }
 
 async function readJSONFromFile<T>(filename: string): Promise<T | null> {
+  // Use AsyncStorage for cache
   try {
-    const file = new File(Paths.document, GTFS_CACHE_DIR, filename);
-    if (!(await file.exists())) return null;
-    const content = await file.text();
+    let key;
+    if (filename === 'routes.json') key = STORAGE_KEYS.ROUTES;
+    else if (filename === 'stops.json') key = STORAGE_KEYS.STOPS;
+    else if (filename === 'stop_times.json') key = STORAGE_KEYS.STOP_TIMES;
+    else if (filename === 'shapes.json') key = STORAGE_KEYS.SHAPES;
+    else return null;
+    const content = await AsyncStorage.getItem(key);
+    if (!content) return null;
     return JSON.parse(content) as T;
   } catch {
     return null;
@@ -234,10 +239,12 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
     const shapes = shapesTxt ? buildShapes(parseCSV(shapesTxt)) : {};
 
     report('Persisting cache', 0.9, 'Writing JSON to device storage');
-    await writeJSONToFile(GTFS_FILES.routes, routes);
-    await writeJSONToFile(GTFS_FILES.stops, stops);
-    await writeJSONToFile(GTFS_FILES.stopTimes, stopTimes);
-    await writeJSONToFile(GTFS_FILES.shapes, shapes);
+
+    // Write to AsyncStorage instead of file system
+    await AsyncStorage.setItem(STORAGE_KEYS.ROUTES, JSON.stringify(routes));
+    await AsyncStorage.setItem(STORAGE_KEYS.STOPS, JSON.stringify(stops));
+    await AsyncStorage.setItem(STORAGE_KEYS.STOP_TIMES, JSON.stringify(stopTimes));
+    await AsyncStorage.setItem(STORAGE_KEYS.SHAPES, JSON.stringify(shapes));
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_FETCH, String(Date.now()));
 
     gtfsParser.overrideData(routes, stops, stopTimes, shapes);

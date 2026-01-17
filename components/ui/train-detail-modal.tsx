@@ -3,7 +3,11 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AppColors, Spacing } from '../../constants/theme';
+
+import { useTrainContext } from '../../context/TrainContext';
 import type { Train } from '../../types/train';
+import { haversineDistance } from '../../utils/distance';
+import { gtfsParser } from '../../utils/gtfs-parser';
 import { getCountdownForTrain } from '../TrainList';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -13,8 +17,9 @@ const FONTS = {
   family: 'System',
 };
 
+
 interface TrainDetailModalProps {
-  train: Train;
+  train?: Train;
   onClose: () => void;
 }
 
@@ -37,39 +42,48 @@ const timeToMinutes = (timeStr: string): number => {
   return totalHours * 60 + minutes;
 };
 
-// Helper function to calculate duration between two times
-const calculateDuration = (startTime: string, endTime: string): string => {
+function calculateDuration(startTime: string, endTime: string): string {
   const startMinutes = timeToMinutes(startTime);
   let endMinutes = timeToMinutes(endTime);
-  
   // If end time is earlier than start time, assume it's the next day
   if (endMinutes < startMinutes) {
     endMinutes += 24 * 60;
   }
-  
   const duration = endMinutes - startMinutes;
   const hours = Math.floor(duration / 60);
   const minutes = duration % 60;
-  
   return `${hours}h ${minutes}m`;
-};
+}
 
 export default function TrainDetailModal({ train, onClose }: TrainDetailModalProps) {
+  // Use context if train is not provided
+  const { selectedTrain } = useTrainContext();
+  const trainData = train || selectedTrain;
+  if (!trainData) return null;
+
   // Detail modal is rendered outside SlideUpModal; use a simple scroll container without gestures.
   const isFullscreen = true;
   const isCollapsed = false;
   const [isHeaderStuck, setIsHeaderStuck] = React.useState(false);
   const scrollOffset = { value: 0 } as any;
   const panGesture = null;
-  
-  // Calculate journey duration from departure to arrival
-  const duration = calculateDuration(train.departTime, train.arriveTime);
 
-  // Estimate mileage based on number of stops (rough estimate: ~40-50 miles per stop segment)
-  const estimatedMiles = Math.round(((train.intermediateStops?.length || 0) + 1) * 45);
+
+  // Calculate journey duration from departure to arrival
+  const duration = calculateDuration(trainData.departTime, trainData.arriveTime);
+
+  // Calculate distance using station coordinates
+  let distanceMiles: number | null = null;
+  try {
+    const fromStop = gtfsParser.getStop(trainData.fromCode);
+    const toStop = gtfsParser.getStop(trainData.toCode);
+    if (fromStop && toStop) {
+      distanceMiles = haversineDistance(fromStop.stop_lat, fromStop.stop_lon, toStop.stop_lat, toStop.stop_lon);
+    }
+  } catch {}
 
   // Countdown logic (shared with TrainList)
-  const countdown = getCountdownForTrain(train);
+  const countdown = getCountdownForTrain(trainData);
   const unitLabel = `${countdown.unit}${countdown.past ? ' AGO' : ''}`;
 
   return (
@@ -101,11 +115,11 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
             <View style={styles.headerTextContainer}>
               <View style={styles.headerTop}>
                 <Text style={styles.headerTitle}>
-                  {train.airline} {train.flightNumber} • {train.date}
+                  {(trainData.routeName ? trainData.routeName : trainData.airline)} {trainData.flightNumber} • {trainData.date}
                 </Text>
               </View>
               <Text style={styles.routeTitle}>
-                {train.from} to {train.to}
+                {trainData.from} to {trainData.to}
               </Text>
             </View>
           </View>
@@ -133,34 +147,35 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
             <View style={styles.infoSection}>
               <View style={styles.infoHeader}>
                 <MaterialCommunityIcons name="arrow-top-right" size={16} color={COLORS.primary} />
-                <Text style={styles.locationCode}>{train.fromCode}</Text>
-                <Text style={styles.locationName}> • {train.from} Intl.</Text>
+                <Text style={styles.locationCode}>{trainData.fromCode}</Text>
+                <Text style={styles.locationName}> • {trainData.from} Intl.</Text>
               </View>
-              <Text style={styles.timeText}>{train.departTime}</Text>
+              <Text style={styles.timeText}>{trainData.departTime}</Text>
               <View style={styles.durationLineRow}>
-                <View style={styles.durationContent}>
-                  <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} />
+                <View style={styles.durationContentRow}>
+                  <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} style={{ marginRight: 6 }} />
                   <Text style={styles.durationText}>{duration}</Text>
+                  {distanceMiles !== null && (
+                    <Text style={[styles.durationText, { marginLeft: 8 }]}>{distanceMiles.toFixed(0)} mi</Text>
+                  )}
                 </View>
                 <View style={styles.horizontalLine} />
               </View>
             </View>
 
             {/* Intermediate Stops with Timeline */}
-            {train.intermediateStops && train.intermediateStops.length > 0 && (
+            {trainData.intermediateStops && trainData.intermediateStops.length > 0 && (
               <View style={styles.timelineContainer}>
                 <View style={styles.dashedLineWrapper}>
                   <View style={styles.dashedLine} />
                 </View>
-                
-                {train.intermediateStops.map((stop, index) => (
+                {trainData.intermediateStops.map((stop, index) => (
                   <View key={index} style={styles.stopSection}>
                     <Text style={styles.stopTime}>{stop.time}</Text>
                     <Text style={styles.stopStation}>{stop.name}</Text>
                     <Text style={styles.stopCode}>{stop.code}</Text>
                   </View>
                 ))}
-
                 <View style={styles.endLineRow}>
                   <View style={styles.horizontalLine} />
                 </View>
@@ -171,12 +186,12 @@ export default function TrainDetailModal({ train, onClose }: TrainDetailModalPro
             <View style={styles.infoSection}>
               <View style={styles.infoHeader}>
                 <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={COLORS.primary} />
-                <Text style={styles.locationCode}>{train.toCode}</Text>
-                <Text style={styles.locationName}> • {train.to} Intl.</Text>
+                <Text style={styles.locationCode}>{trainData.toCode}</Text>
+                <Text style={styles.locationName}> • {trainData.to} Intl.</Text>
               </View>
               <Text style={styles.timeText}>
-                {train.arriveTime}
-                {train.arriveNext ? ' +1' : ''}
+                {trainData.arriveTime}
+                {trainData.arriveNext ? ' +1' : ''}
               </Text>
             </View>
           </>
@@ -328,6 +343,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+    gap: 8,
+  },
+  durationContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingRight: 8,
   },
   endLineRow: {
     flexDirection: 'row',

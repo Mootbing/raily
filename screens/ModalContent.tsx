@@ -7,6 +7,7 @@ import { FrequentlyUsedList } from '../components/FrequentlyUsedList';
 import { SearchBar } from '../components/SearchBar';
 import { TrainList } from '../components/TrainList';
 import { SlideUpModalContext } from '../components/ui/slide-up-modal';
+import { useTrainContext } from '../context/TrainContext';
 import { DEFAULT_TRAIN } from '../fixtures/trains';
 import { useFrequentlyUsed } from '../hooks/useFrequentlyUsed';
 import { TrainAPIService } from '../services/api';
@@ -78,12 +79,12 @@ function SearchResults({
   );
 }
 
-export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void }) {
+export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train) => void }) {
   const { isFullscreen, isCollapsed, scrollOffset, panGesture, snapToPoint } = useContext(SlideUpModalContext);
   const [imageError, setImageError] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [savedTrains, setSavedTrains] = useState<Train[]>([]);
+  const { savedTrains, setSavedTrains, setSelectedTrain } = useTrainContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState(0);
   const [refreshStep, setRefreshStep] = useState('');
@@ -104,7 +105,7 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
       }
     };
     loadSavedTrains();
-  }, []);
+  }, [setSavedTrains]);
 
   // Save train using storage service
   const saveTrain = async (train: Train) => {
@@ -139,8 +140,6 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
   };
 
   const flights = savedTrains;
-
-  
 
   // Exit search mode when modal is collapsed
   useEffect(() => {
@@ -214,14 +213,16 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
           )}
 
           {!isRefreshing && (
-            <SearchBar
-              isSearchFocused={isSearchFocused}
-              searchQuery={searchQuery}
-              setIsSearchFocused={setIsSearchFocused}
-              setSearchQuery={setSearchQuery}
-              snapToPoint={snapToPoint}
-              searchInputRef={searchInputRef}
-            />
+            <View style={{ paddingHorizontal: 0, marginBottom: 0 }}>
+              <SearchBar
+                isSearchFocused={isSearchFocused}
+                searchQuery={searchQuery}
+                setIsSearchFocused={setIsSearchFocused}
+                setSearchQuery={setSearchQuery}
+                snapToPoint={snapToPoint}
+                searchInputRef={searchInputRef}
+              />
+            </View>
           )}
         </View>
         {isSearchFocused && !isCollapsed && (
@@ -239,7 +240,7 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
                     const trainObj = await TrainAPIService.getTrainDetails(tripData.trip_id);
                     if (trainObj) {
                       await saveTrain(trainObj);
-                      onTrainSelect(trainObj);
+                      onTrainSelect && onTrainSelect(trainObj);
                       setSearchQuery('');
                       setIsSearchFocused(false);
                     }
@@ -249,7 +250,7 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
                     const trains = await TrainAPIService.getTrainsForStation(stopData.stop_id);
                     if (trains.length > 0) {
                       await saveTrain(trains[0]);
-                      onTrainSelect(trains[0]);
+                      onTrainSelect && onTrainSelect(trains[0]);
                       setSearchQuery('');
                       setIsSearchFocused(false);
                     }
@@ -267,7 +268,10 @@ export default function ModalContent({ onTrainSelect }: { onTrainSelect: (train:
           </View>
         )}
         {!isSearchFocused && !isRefreshing && (
-          <TrainList flights={flights} onTrainSelect={onTrainSelect} />
+          <TrainList flights={flights} onTrainSelect={(train) => {
+            setSelectedTrain(train);
+            if (typeof onTrainSelect === 'function') onTrainSelect(train);
+          }} />
         )}
       </ScrollView>
     </GestureDetector>
