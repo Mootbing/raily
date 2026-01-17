@@ -17,6 +17,14 @@ export interface Train {
   routeName: string;
   arriveNext?: boolean;
   intermediateStops?: IntermediateStop[];
+  // Real-time data
+  tripId?: string;
+  realtime?: {
+    position?: { lat: number; lon: number };
+    delay?: number; // minutes
+    status?: string;
+    lastUpdated?: number;
+  };
 }
 
 export interface IntermediateStop {
@@ -66,6 +74,13 @@ export interface Trip {
   trip_id: string;
   trip_short_name?: string;
   trip_headsign?: string;
+}
+
+export interface Shape {
+  shape_id: string;
+  shape_pt_lat: number;
+  shape_pt_lon: number;
+  shape_pt_sequence: number;
 }
 
 export type SearchResultType = 'station' | 'train' | 'route';

@@ -3,10 +3,10 @@ import React, { createContext, useEffect, useState } from 'react';
 import { Dimensions, Platform, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
 } from 'react-native-reanimated';
 import { BorderRadius, Spacing } from '../../constants/theme';
 
@@ -42,6 +42,12 @@ interface SlideUpModalProps {
 
 export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') => void }, SlideUpModalProps>(
   function SlideUpModal({ children, onSnapChange, onHeightChange, onDismiss }: SlideUpModalProps, ref: React.Ref<any>) {
+  // Get safe area insets dynamically
+  const screenHeight = Dimensions.get('screen').height;
+  const windowHeight = Dimensions.get('window').height;
+  const safeAreaBottomInset = screenHeight - windowHeight;
+  const safeAreaTopInset = 0; // Top inset is handled by status bar, we'll use margin to extend
+  
   const translateY = useSharedValue(SCREEN_HEIGHT - SNAP_POINTS.HALF);
   const context = useSharedValue({ y: 0 });
   const currentSnap = useSharedValue<'min' | 'half' | 'max'>('half');
@@ -174,38 +180,28 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   return (
     <Animated.View style={[styles.container, animatedStyle]}>
       <SlideUpModalContext.Provider value={{ isFullscreen, isCollapsed, scrollOffset, panGesture, modalHeight, snapToPoint }}>
-        {Platform.OS === 'ios' || Platform.OS === 'android' ? (
-          <BlurView intensity={40} style={[
+        <BlurView
+          intensity={40}
+          style={[
             styles.blurContainer,
+            isFullscreen && styles.blurContainerFullscreen,
+            isFullscreen && {
+              marginTop: -safeAreaTopInset,
+              marginBottom: -safeAreaBottomInset,
+            },
             !isFullscreen && {
               borderTopLeftRadius: BorderRadius.xl,
               borderTopRightRadius: BorderRadius.xl,
-            }
-          ]}>
-            <GestureDetector gesture={panGesture}>
-              <View style={styles.content}>
-                <View style={styles.handleContainer} />
-                <View style={styles.childrenContainer}>{children}</View>
-              </View>
-            </GestureDetector>
-          </BlurView>
-        ) : (
-          <View style={[
-            styles.glassWeb,
-            styles.content,
-            !isFullscreen && {
-              borderTopLeftRadius: BorderRadius.xl,
-              borderTopRightRadius: BorderRadius.xl,
-            }
-          ]}>
-            <GestureDetector gesture={panGesture}>
-              <View style={{ flex: 1 }}>
-                <View style={styles.handleContainer} />
-                <View style={styles.childrenContainer}>{children}</View>
-              </View>
-            </GestureDetector>
-          </View>
-        )}
+            },
+          ]}
+        >
+          <GestureDetector gesture={panGesture}>
+            <View style={[styles.content, isFullscreen && { paddingTop: safeAreaTopInset }]}>
+              <View style={styles.handleContainer} />
+              <View style={styles.childrenContainer}>{children}</View>
+            </View>
+          </GestureDetector>
+        </BlurView>
       </SlideUpModalContext.Provider>
     </Animated.View>
   );
@@ -241,16 +237,12 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
-  glassWeb: {
-    flex: 1,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(20, 20, 25, 0.8)',
-    backdropFilter: 'blur(20px)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+  blurContainerFullscreen: {
+    borderWidth: 0,
     borderBottomWidth: 0,
-    boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.25)',
+    shadowOpacity: 0,
   },
+  
   content: {
     flex: 1,
     borderTopLeftRadius: BorderRadius.xl,

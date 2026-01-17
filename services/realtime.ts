@@ -1,0 +1,307 @@
+/**
+ * Real-time train tracking service
+ * Fetches live positions and delays from Transitdocs GTFS-RT feed
+ */
+
+import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
+
+export interface RealtimePosition {
+  trip_id: string;
+  latitude: number;
+  longitude: number;
+  bearing?: number;
+  speed?: number;
+  timestamp: number;
+  vehicle_id?: string;
+  train_number?: string; // Extracted train number for matching
+}
+
+export interface RealtimeUpdate {
+  trip_id: string;
+  stop_id?: string;
+  arrival_delay?: number; // seconds
+  departure_delay?: number; // seconds
+  schedule_relationship?: 'SCHEDULED' | 'SKIPPED' | 'NO_DATA';
+}
+
+export interface RealtimeAlert {
+  trip_id?: string;
+  route_id?: string;
+  header: string;
+  description: string;
+  severity?: 'INFO' | 'WARNING' | 'SEVERE';
+}
+
+// Transitdocs GTFS-RT endpoint (consolidates vehicle positions and trip updates)
+const TRANSITDOCS_GTFS_RT_URL = 'https://asm-backend.transitdocs.com/gtfs/amtrak';
+
+// Cache for real-time data (15 seconds TTL for more frequent updates)
+const CACHE_TTL = 15000;
+let positionsCache: { data: Map<string, RealtimePosition>; timestamp: number } | null = null;
+let updatesCache: { data: Map<string, RealtimeUpdate[]>; timestamp: number } | null = null;
+
+/**
+ * Fetch GTFS-RT protobuf data
+ */
+async function fetchProtobuf(url: string): Promise<Uint8Array> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`GTFS-RT fetch failed: ${response.status}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return new Uint8Array(arrayBuffer);
+}
+
+/**
+ * Extract train number from trip_id
+ * Examples: "2026-01-16_AMTK_543" -> "543", "220408" -> "220408"
+ */
+function extractTrainNumber(tripId: string): string {
+  // Try to match pattern: YYYY-MM-DD_AMTK_NNN
+  const match = tripId.match(/_AMTK_(\d+)$/);
+  if (match) {
+    return match[1];
+  }
+  // Otherwise, assume trip_id is already a train number
+  return tripId;
+}
+
+/**
+ * Parse GTFS-RT protobuf for vehicle positions
+ */
+function parseVehiclePositions(buffer: Uint8Array): Map<string, RealtimePosition> {
+  const positions = new Map<string, RealtimePosition>();
+  
+  try {
+    const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
+    
+    for (const entity of feed.entity) {
+      if (entity.vehicle && entity.vehicle.position && entity.vehicle.trip) {
+        const tripId = entity.vehicle.trip.tripId || '';
+        const trainNumber = extractTrainNumber(tripId);
+        
+        positions.set(tripId, {
+          trip_id: tripId,
+          train_number: trainNumber,
+          latitude: entity.vehicle.position.latitude,
+          longitude: entity.vehicle.position.longitude,
+          bearing: entity.vehicle.position.bearing ?? undefined,
+          speed: entity.vehicle.position.speed ?? undefined,
+          timestamp: entity.vehicle.timestamp 
+            ? Number(entity.vehicle.timestamp) * 1000 // Convert to milliseconds
+            : Date.now(),
+          vehicle_id: entity.vehicle.vehicle?.id ?? undefined,
+        });
+        
+        // Also index by train number for easier lookup
+        if (trainNumber !== tripId) {
+          positions.set(trainNumber, positions.get(tripId)!);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing vehicle positions:', error);
+  }
+  
+  return positions;
+}
+
+/**
+ * Parse GTFS-RT protobuf for trip updates
+ */
+function parseTripUpdates(buffer: Uint8Array): Map<string, RealtimeUpdate[]> {
+  const updates = new Map<string, RealtimeUpdate[]>();
+  
+  try {
+    const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
+    
+    for (const entity of feed.entity) {
+      if (entity.tripUpdate && entity.tripUpdate.trip) {
+        const tripId = entity.tripUpdate.trip.tripId || '';
+        const trainNumber = extractTrainNumber(tripId);
+        const stopUpdates: RealtimeUpdate[] = [];
+        
+        for (const stopTime of entity.tripUpdate.stopTimeUpdate || []) {
+          stopUpdates.push({
+            trip_id: tripId,
+            stop_id: stopTime.stopId ?? undefined,
+            arrival_delay: stopTime.arrival?.delay ?? undefined,
+            departure_delay: stopTime.departure?.delay ?? undefined,
+            schedule_relationship: stopTime.scheduleRelationship === 1 ? 'SCHEDULED' : 'NO_DATA',
+          });
+        }
+        
+        if (stopUpdates.length > 0) {
+          updates.set(tripId, stopUpdates);
+          // Also index by train number
+          if (trainNumber !== tripId) {
+            updates.set(trainNumber, stopUpdates);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing trip updates:', error);
+  }
+  
+  return updates;
+}
+
+export class RealtimeService {
+  /**
+   * Get real-time position for a specific trip or train number
+   * Supports both trip_id format (e.g., "2026-01-16_AMTK_543") and train number (e.g., "543")
+   */
+  static async getPositionForTrip(tripIdOrTrainNumber: string): Promise<RealtimePosition | null> {
+    try {
+      const positions = await this.getAllPositions();
+      
+      // Try direct lookup first
+      let position = positions.get(tripIdOrTrainNumber);
+      
+      // If not found, try extracting/matching train number
+      if (!position) {
+        const trainNumber = extractTrainNumber(tripIdOrTrainNumber);
+        position = positions.get(trainNumber);
+      }
+      
+      return position || null;
+    } catch (error) {
+      console.error('Error fetching real-time position:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get all current train positions from Transitdocs feed
+   */
+  static async getAllPositions(): Promise<Map<string, RealtimePosition>> {
+    try {
+      // Check cache
+      const now = Date.now();
+      if (positionsCache && (now - positionsCache.timestamp) < CACHE_TTL) {
+        return positionsCache.data;
+      }
+
+      // Fetch fresh data from Transitdocs
+      const buffer = await fetchProtobuf(TRANSITDOCS_GTFS_RT_URL);
+      const positions = parseVehiclePositions(buffer);
+
+      // Update cache
+      positionsCache = { data: positions, timestamp: now };
+      return positions;
+    } catch (error) {
+      console.error('Error fetching vehicle positions:', error);
+      // Return cached data if available, even if stale
+      return positionsCache?.data || new Map();
+    }
+  }
+
+  /**
+   * Get trip updates (delays) for a specific trip or train number
+   */
+  static async getUpdatesForTrip(tripIdOrTrainNumber: string): Promise<RealtimeUpdate[]> {
+    try {
+      const updates = await this.getAllUpdates();
+      
+      // Try direct lookup first
+      let tripUpdates = updates.get(tripIdOrTrainNumber);
+      
+      // If not found, try extracting/matching train number
+      if (!tripUpdates) {
+        const trainNumber = extractTrainNumber(tripIdOrTrainNumber);
+        tripUpdates = updates.get(trainNumber);
+      }
+      
+      return tripUpdates || [];
+    } catch (error) {
+      console.error('Error fetching trip updates:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all trip updates from Transitdocs feed
+   */
+  static async getAllUpdates(): Promise<Map<string, RealtimeUpdate[]>> {
+    try {
+      // Check cache
+      const now = Date.now();
+      if (updatesCache && (now - updatesCache.timestamp) < CACHE_TTL) {
+        return updatesCache.data;
+      }
+
+      // Fetch fresh data from Transitdocs
+      const buffer = await fetchProtobuf(TRANSITDOCS_GTFS_RT_URL);
+      const updates = parseTripUpdates(buffer);
+
+      // Update cache
+      updatesCache = { data: updates, timestamp: now };
+      return updates;
+    } catch (error) {
+      console.error('Error fetching trip updates:', error);
+      // Return cached data if available, even if stale
+      return updatesCache?.data || new Map();
+    }
+  }
+
+  /**
+   * Get delay in minutes for a trip at a specific stop
+   */
+  static async getDelayForStop(tripIdOrTrainNumber: string, stopId: string): Promise<number | null> {
+    try {
+      const updates = await this.getUpdatesForTrip(tripIdOrTrainNumber);
+      const stopUpdate = updates.find(u => u.stop_id === stopId);
+      
+      if (stopUpdate && stopUpdate.departure_delay !== undefined) {
+        return Math.round(stopUpdate.departure_delay / 60); // Convert seconds to minutes
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error getting delay:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Format delay for display
+   */
+  static formatDelay(delayMinutes: number | null): string {
+    if (delayMinutes === null || delayMinutes === 0) {
+      return 'On Time';
+    }
+    if (delayMinutes > 0) {
+      return `Delayed ${delayMinutes}m`;
+    }
+    return `Early ${Math.abs(delayMinutes)}m`;
+  }
+
+  /**
+   * Clear caches (useful for manual refresh)
+   */
+  static clearCache(): void {
+    positionsCache = null;
+    updatesCache = null;
+  }
+  
+  /**
+   * Get all active trains with their current positions
+   * Returns an array of {trainNumber, position} for easy consumption
+   */
+  static async getAllActiveTrains(): Promise<Array<{ trainNumber: string; position: RealtimePosition }>> {
+    const positions = await this.getAllPositions();
+    const trains: Array<{ trainNumber: string; position: RealtimePosition }> = [];
+    const seen = new Set<string>();
+    
+    for (const [key, position] of positions.entries()) {
+      const trainNumber = position.train_number || extractTrainNumber(key);
+      if (!seen.has(trainNumber)) {
+        trains.push({ trainNumber, position });
+        seen.add(trainNumber);
+      }
+    }
+    
+    return trains;
+  }
+}

@@ -4,23 +4,23 @@
 import { Train } from '../types/train';
 
 export const DEFAULT_TRAIN: Train = {
-  id: 234047,
+  id: 43,
   airline: 'AMTK',
-  flightNumber: '234047',
-  from: 'Penn Station',
-  to: 'Miami',
+  flightNumber: '43',
+  from: 'New York',
+  to: 'Pittsburgh',
   fromCode: 'NYP',
-  toCode: 'MIA',
-  departTime: '2:50 PM',
-  arriveTime: '10:05 AM',
+  toCode: 'PGH',
+  departTime: '11:05 AM',
+  arriveTime: '7:40 PM',
   date: 'Today',
   daysAway: 0,
-  routeName: 'Train 234047',
+  routeName: 'Pennsylvanian',
   intermediateStops: [
-    { time: '3:30 PM', name: 'Jamaica Station', code: 'JMZ' },
-    { time: '4:45 PM', name: 'Baltimore Penn Station', code: 'BAL' },
-    { time: '7:20 PM', name: 'Richmond Union Station', code: 'RVR' },
-    { time: '10:15 PM', name: 'Raleigh Station', code: 'RGH' },
+    { time: '11:50 AM', name: 'Newark', code: 'NWK' },
+    { time: '1:03 PM', name: 'Philadelphia', code: 'PHL' },
+    { time: '2:22 PM', name: 'Harrisburg', code: 'HAR' },
+    { time: '4:52 PM', name: 'Altoona', code: 'AOO' },
   ],
 };
 

@@ -1,159 +1,7 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Dimensions, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
-import MapView from 'react-native-maps';
-import SlideUpModal, { SlideUpModalContext } from '../components/ui/slide-up-modal';
-import TrainDetailModal from '../components/ui/train-detail-modal';
-import { AppColors, BorderRadius, FontSizes, Spacing } from '../constants/theme';
-import { DEFAULT_TRAIN } from '../fixtures/trains';
-import { TrainAPIService } from '../services/api';
-import { TrainStorageService } from '../services/storage';
-import type { Train } from '../types/train';
+import MapScreen from '../screens/MapScreen';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// Use centralized theme constants
-const COLORS = AppColors;
-const FONTS = {
-  family: 'System',
-};
-
-// Helper: parse a 12-hour time string (e.g., "3:45 PM") to a Date on baseDate
-function parseTimeToDate(timeStr: string, baseDate: Date): Date {
-  const [time, meridian] = timeStr.split(' ');
-  const [hStr, mStr] = time.split(':');
-  let hours = parseInt(hStr, 10);
-  const minutes = parseInt(mStr, 10);
-  const isPM = (meridian || '').toUpperCase() === 'PM';
-  if (isPM && hours !== 12) hours += 12;
-  if (!isPM && hours === 12) hours = 0;
-  const d = new Date(baseDate);
-  d.setHours(hours, minutes, 0, 0);
-  return d;
-}
-
-// Helper: get countdown value and unit for train departure
-function getCountdownForTrain(train: Train): { value: number; unit: 'DAYS' | 'HOURS' | 'MINUTES' | 'SECONDS'; past: boolean } {
-  // If we know it's more than a day away, keep DAYS granularity
-  if (train.daysAway && train.daysAway > 0) {
-    return { value: Math.round(train.daysAway), unit: 'DAYS', past: false };
-  }
-  const now = new Date();
-  // Base on today by default; a future enhancement could infer actual date
-  const baseDate = new Date(now);
-  const departDate = parseTimeToDate(train.departTime, baseDate);
-  let deltaSec = (departDate.getTime() - now.getTime()) / 1000;
-  const past = deltaSec < 0;
-  const absSec = Math.abs(deltaSec);
-
-  // Choose the most appropriate unit, rounding to nearest whole number
-  let hours = Math.round(absSec / 3600);
-  if (hours >= 1) {
-    return { value: hours, unit: 'HOURS', past };
-  }
-  let minutes = Math.round(absSec / 60);
-  if (minutes >= 60) {
-    // Escalate to 1 hour if rounding pushes to 60
-    return { value: 1, unit: 'HOURS', past };
-  }
-  if (minutes >= 1) {
-    return { value: minutes, unit: 'MINUTES', past };
-  }
-  let seconds = Math.round(absSec);
-  if (seconds >= 60) {
-    // Escalate to 1 minute if rounding pushes to 60
-    return { value: 1, unit: 'MINUTES', past };
-  }
-  return { value: seconds, unit: 'SECONDS', past };
-}
-
-// Search Results Component
-function SearchResults({ 
-  query, 
-  onSelectResult 
-}: { 
-  query: string; 
-  onSelectResult: (result: any) => void;
-}) {
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const searchTrains = async () => {
-      setLoading(true);
-      const searchResults = await TrainAPIService.search(query);
-      setResults(searchResults);
-      setLoading(false);
-    };
-    searchTrains();
-  }, [query]);
-
-  if (loading) {
-    return (
-      <View style={styles.frequentlyUsedItem}>
-        <Text style={styles.frequentlyUsedName}>Searching...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <>
-      {results.map((result) => (
-        <TouchableOpacity
-          key={result.id}
-          style={styles.frequentlyUsedItem}
-          activeOpacity={0.7}
-          onPress={() => onSelectResult(result)}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel={`${result.name}, ${result.subtitle}`}
-          accessibilityHint={`Select ${result.type} ${result.name}`}
-        >
-          <View style={styles.frequentlyUsedIcon}>
-            {result.type === 'train' && (
-              <Ionicons name="train" size={24} color={COLORS.accentBlue} />
-            )}
-            {result.type === 'station' && (
-              <Ionicons name="location" size={24} color={COLORS.accentBlue} />
-            )}
-            {result.type === 'route' && (
-              <Ionicons name="train" size={24} color={COLORS.accentBlue} />
-            )}
-          </View>
-          <View style={styles.frequentlyUsedText}>
-            <Text style={styles.frequentlyUsedName}>{result.name}</Text>
-            <Text style={styles.frequentlyUsedSubtitle}>{result.subtitle}</Text>
-          </View>
-          <Ionicons name="arrow-forward" size={20} color={COLORS.secondary} />
-        </TouchableOpacity>
-      ))}
-    </>
-  );
-}
-
-function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void }) {
-  const { isFullscreen, isCollapsed, scrollOffset, panGesture, snapToPoint } = useContext(SlideUpModalContext);
-  const [imageError, setImageError] = useState(false);
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [savedTrains, setSavedTrains] = useState<Train[]>([]);
-  const searchInputRef = React.useRef<TextInput>(null);
-
-  // Load saved trains from storage service
-  useEffect(() => {
-    const loadSavedTrains = async () => {
-      const trains = await TrainStorageService.getSavedTrains();
-      if (trains.length === 0) {
-        // Initialize with default train
-        await TrainStorageService.initializeWithDefaults([DEFAULT_TRAIN]);
-        setSavedTrains([DEFAULT_TRAIN]);
-      } else {
-        setSavedTrains(trains);
-      }
-    };
-    loadSavedTrains();
+export default MapScreen;
+/* Legacy code below retained but disabled for mobile-only refactor.
   }, []);
 
   // Save train using storage service
@@ -162,6 +10,38 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
     if (saved) {
       const updatedTrains = await TrainStorageService.getSavedTrains();
       setSavedTrains(updatedTrains);
+    }
+  };
+
+  // Manual refresh handler
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    snapToPoint('max'); // Expand to fullscreen loading screen
+    try {
+      await ensureFreshGTFS();
+      // Reload frequently used after refresh
+      const routes = await TrainAPIService.getRoutes();
+      const stops = await TrainAPIService.getStops();
+      setFrequentlyUsed([
+        ...routes.slice(0, 3).map((route, index) => ({
+          id: `freq-route-${index}`,
+          name: route.route_long_name,
+          code: route.route_short_name || route.route_id.substring(0, 3),
+          subtitle: `AMT${route.route_id}`,
+          type: 'train' as const,
+        })),
+        ...stops.slice(0, 2).map((stop, index) => ({
+          id: `freq-stop-${index}`,
+          name: stop.stop_name,
+          code: stop.stop_id,
+          subtitle: stop.stop_id,
+          type: 'station' as const,
+        })),
+      ]);
+    } catch (error) {
+      console.error('Manual refresh failed:', error);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -220,13 +100,33 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
         scrollEventThrottle={16}
       >
         <View>
-          <Text style={[styles.title, isCollapsed && styles.titleCollapsed]}>{isSearchFocused ? 'Add Train' : 'My Trains'}</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, isCollapsed && styles.titleCollapsed]}>{isSearchFocused ? 'Add Train' : 'My Trains'}</Text>
+            {!isSearchFocused && (
+              <TouchableOpacity
+                onPress={handleRefresh}
+                disabled={isRefreshing}
+                style={styles.refreshButton}
+                activeOpacity={0.7}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Refresh train schedules"
+              >
+                <Ionicons 
+                  name="refresh" 
+                  size={24} 
+                  color={isRefreshing ? COLORS.secondary : COLORS.accentBlue}
+                  style={isRefreshing ? styles.refreshIconSpinning : undefined}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
           {isSearchFocused && (
             <Text style={styles.subtitle}>Add any amtrak train (for now)</Text>
           )}
           
           {isSearchFocused ? (
-            <View style={[styles.searchContainer, isCollapsed && styles.searchContainerCollapsed]}>
+            <View style={styles.searchContainer}>
               <Ionicons name="search" size={20} color="#888" />
               <TextInput
                 ref={searchInputRef}
@@ -259,14 +159,15 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
             </View>
           ) : (
             <TouchableOpacity
-              style={[styles.searchContainer, isCollapsed && styles.searchContainerCollapsed]}
+              style={styles.searchContainer}
               activeOpacity={0.7}
               onPress={() => {
                 setIsSearchFocused(true);
                 snapToPoint?.('max');
+                // Wait for modal animation to complete before focusing
                 setTimeout(() => {
                   searchInputRef.current?.focus();
-                }, 50);
+                }, 300);
               }}
               accessible={true}
               accessibilityRole="button"
@@ -326,10 +227,10 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
                 >
                   <View style={styles.frequentlyUsedIcon}>
                     {item.type === 'train' && (
-                      <Ionicons name="train" size={24} color={COLORS.accentBlue} />
+                      <Ionicons name="train" size={24} color="#8B5CF6" />
                     )}
                     {item.type === 'station' && (
-                      <Ionicons name="location" size={24} color={COLORS.accentBlue} />
+                      <Ionicons name="location" size={24} color="#10B981" />
                     )}
                   </View>
                   <View style={styles.frequentlyUsedText}>
@@ -384,6 +285,14 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
                     )}
                     <Text style={styles.flightNumber}>{flight.airline} {flight.flightNumber}</Text>
                     <Text style={styles.flightDate}>{flight.date}</Text>
+                    {flight.realtime?.status && (
+                      <View style={[
+                        styles.realtimeBadge,
+                        flight.realtime.delay && flight.realtime.delay > 0 ? styles.delayedBadge : styles.onTimeBadge
+                      ]}>
+                        <Text style={styles.realtimeBadgeText}>{flight.realtime.status}</Text>
+                      </View>
+                    )}
                   </View>
                   
                   <Text style={styles.route}>{flight.from} to {flight.to}</Text>
@@ -418,11 +327,14 @@ function ModalContent({ onTrainSelect }: { onTrainSelect: (train: Train) => void
   );
 }
 
-export default function MapScreen() {
+function MapScreenLocal() {
   const mapRef = useRef<MapView>(null);
   const mainModalRef = useRef<any>(null);
   const [selectedTrain, setSelectedTrain] = useState<any>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [stations, setStations] = useState<Array<{ id: string; name: string; lat: number; lon: number }>>([]);
+  const [visibleShapes, setVisibleShapes] = useState<Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>>([]);
+  const [savedTrains, setSavedTrains] = useState<Train[]>([]);
   const [region, setRegion] = useState({
     latitude: 37.78825,
     longitude: -122.4324,
@@ -447,8 +359,54 @@ export default function MapScreen() {
       };
       setRegion(newRegion);
       mapRef.current?.animateToRegion(newRegion, 1000);
+
+      // Load all stations directly - no lazy loading
+      const allStops = gtfsParser.getAllStops();
+      setStations(allStops.map(stop => ({
+        id: stop.stop_id,
+        name: stop.stop_name,
+        lat: stop.stop_lat,
+        lon: stop.stop_lon,
+      })));
+
+      // Initialize shape loader with all shapes
+      const rawShapes = gtfsParser.getRawShapesData();
+      shapeLoader.initialize(rawShapes);
+
+      // Get initial visible shapes based on current region
+      const bounds = {
+        minLat: region.latitude - region.latitudeDelta / 2,
+        maxLat: region.latitude + region.latitudeDelta / 2,
+        minLon: region.longitude - region.longitudeDelta / 2,
+        maxLon: region.longitude + region.longitudeDelta / 2,
+      };
+      setVisibleShapes(shapeLoader.getVisibleShapes(bounds));
+
+      // Load saved trains and fetch real-time data
+      const trains = await TrainStorageService.getSavedTrains();
+      const trainsWithRealtime = await Promise.all(
+        trains.map(train => TrainAPIService.refreshRealtimeData(train))
+      );
+      setSavedTrains(trainsWithRealtime);
     })();
   }, []);
+
+  // Update visible shapes and stations when viewport changes
+  const handleRegionChange = (newRegion: any) => {
+    setRegion(newRegion);
+
+    // Query viewport bounds
+    const bounds = {
+      minLat: newRegion.latitude - newRegion.latitudeDelta / 2,
+      maxLat: newRegion.latitude + newRegion.latitudeDelta / 2,
+      minLon: newRegion.longitude - newRegion.longitudeDelta / 2,
+      maxLon: newRegion.longitude + newRegion.longitudeDelta / 2,
+    };
+
+    // Get visible shapes using shape loader
+    const visible = shapeLoader.getVisibleShapes(bounds);
+    setVisibleShapes(visible);
+  };
 
   return (
     <View style={styles.container}>
@@ -460,7 +418,56 @@ export default function MapScreen() {
         showsTraffic={false}
         showsIndoors={true}
         userLocationAnnotationTitle="Your Location"
-      />
+        provider={PROVIDER_DEFAULT}
+        onRegionChange={handleRegionChange}
+      >
+        {/* Route Polylines - Only visible in current viewport */}
+        {visibleShapes.map((shape) => (
+          <Polyline
+            key={shape.id}
+            coordinates={shape.coordinates}
+            strokeColor="#FFFFFF"
+            strokeWidth={2}
+            lineCap="round"
+            lineJoin="round"
+          />
+        ))}
+
+        {/* Station Markers */}
+        {stations.map((station) => (
+          <Marker
+            key={station.id}
+            coordinate={{ latitude: station.lat, longitude: station.lon }}
+            title={station.name}
+            description={station.id}
+          >
+            <Ionicons name="location" size={24} color="#FFFFFF" />
+          </Marker>
+        ))}
+
+        {/* Live Train Positions */}
+        {savedTrains
+          .filter(train => train.realtime?.position)
+          .map((train) => (
+            <Marker
+              key={`live-${train.id}`}
+              coordinate={{ 
+                latitude: train.realtime!.position!.lat, 
+                longitude: train.realtime!.position!.lon 
+              }}
+              title={`Train ${train.flightNumber}`}
+              description={train.realtime?.status || 'Live'}
+              onPress={() => {
+                setSelectedTrain(train);
+                setShowDetailModal(true);
+              }}
+            >
+              <View style={styles.liveTrainMarker}>
+                <Ionicons name="navigate" size={20} color="white" />
+              </View>
+            </Marker>
+          ))}
+      </MapView>
       
       <SlideUpModal ref={mainModalRef}>
         <ModalContent onTrainSelect={(train) => {
@@ -483,6 +490,8 @@ export default function MapScreen() {
   );
 }
 
+export default MapScreen;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -501,15 +510,28 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
   title: {
     fontSize: FontSizes.title,
     fontWeight: 'bold',
     fontFamily: FONTS.family,
     color: COLORS.primary,
-    marginBottom: Spacing.md,
   },
   titleCollapsed: {
     marginBottom: Spacing.sm,
+  },
+  refreshButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  refreshIconSpinning: {
+    opacity: 0.5,
   },
   subtitle: {
     fontSize: FontSizes.flightDate,
@@ -703,4 +725,37 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '500',
   },
+  liveTrainMarker: {
+    backgroundColor: '#10B981',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  realtimeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  onTimeBadge: {
+    backgroundColor: '#10B981',
+  },
+  delayedBadge: {
+    backgroundColor: '#EF4444',
+  },
+  realtimeBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+  },
 });
+*/

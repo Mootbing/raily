@@ -4,12 +4,14 @@
  */
 
 import routesData from '../assets/gtfs-data/routes.json';
+import shapesData from '../assets/gtfs-data/shapes.json';
 import stopTimesData from '../assets/gtfs-data/stop-times.json';
 import stopsData from '../assets/gtfs-data/stops.json';
 import type {
     EnrichedStopTime,
     Route,
     SearchResult,
+    Shape,
     Stop,
     StopTime,
 } from '../types/train';
@@ -18,6 +20,7 @@ export class GTFSParser {
   private routes: Map<string, Route> = new Map();
   private stops: Map<string, Stop> = new Map();
   private stopTimes: Map<string, StopTime[]> = new Map();
+  private shapes: Map<string, Shape[]> = new Map();
 
   constructor() {
     this.loadData();
@@ -37,6 +40,32 @@ export class GTFSParser {
     // Load stop times
     Object.entries(stopTimesData).forEach(([tripId, times]) => {
       this.stopTimes.set(tripId, times as StopTime[]);
+    });
+
+    // Load shapes
+    Object.entries(shapesData).forEach(([shapeId, points]) => {
+      this.shapes.set(shapeId, points as Shape[]);
+    });
+  }
+
+  // Override parser data with dynamically fetched cache
+  overrideData(routes: Route[], stops: Stop[], stopTimes: Record<string, StopTime[]>, shapes: Record<string, Shape[]> = {}): void {
+    this.routes.clear();
+    this.stops.clear();
+    this.stopTimes.clear();
+    this.shapes.clear();
+
+    routes.forEach(route => {
+      if (route && route.route_id) this.routes.set(route.route_id, route);
+    });
+    stops.forEach(stop => {
+      if (stop && stop.stop_id) this.stops.set(stop.stop_id, stop);
+    });
+    Object.entries(stopTimes).forEach(([tripId, times]) => {
+      if (tripId && Array.isArray(times)) this.stopTimes.set(tripId, times);
+    });
+    Object.entries(shapes).forEach(([shapeId, points]) => {
+      if (shapeId && Array.isArray(points)) this.shapes.set(shapeId, points);
     });
   }
 
@@ -103,9 +132,22 @@ export class GTFSParser {
     return Array.from(this.stopTimes.keys());
   }
 
+  getRawShapesData(): Record<string, any[]> {
+    const result: Record<string, any[]> = {};
+    this.shapes.forEach((points, shapeId) => {
+      result[shapeId] = points;
+    });
+    return result;
+  }
+
   search(query: string): SearchResult[] {
     const results: SearchResult[] = [];
-    const queryLower = query.toLowerCase();
+    let queryLower = query.toLowerCase();
+    
+    // Strip "AMT" prefix if present (e.g., "AMT123" becomes "123")
+    if (queryLower.startsWith('amt')) {
+      queryLower = queryLower.substring(3);
+    }
 
     // Search stops (stations)
     this.stops.forEach((stop) => {
@@ -114,7 +156,7 @@ export class GTFSParser {
         results.push({
           id: `stop-name-${stop.stop_id}`,
           name: stop.stop_name,
-          subtitle: `station name matches "${query}"`,
+          subtitle: `Name contains "${query}"`,
           type: 'station',
           data: stop,
         });
@@ -157,7 +199,7 @@ export class GTFSParser {
           results.push({
             id: `trip-stop-${tripId}-${stopId}`,
             name: `Train ${tripId}`,
-            subtitle: `train stops at "${stop.stop_name}"`,
+            subtitle: `Stops at "${stop.stop_name}"`,
             type: 'train',
             data: { trip_id: tripId, stop_id: stopId, stop_name: stop.stop_name },
           });
@@ -174,6 +216,44 @@ export class GTFSParser {
         return true;
       })
       .slice(0, 20); // Limit to 20 results
+  }
+
+  getShape(shapeId: string): Shape[] | undefined {
+    return this.shapes.get(shapeId);
+  }
+
+  getAllShapeIds(): string[] {
+    return Array.from(this.shapes.keys());
+  }
+
+  // Get all shapes as polyline coordinates for map rendering
+  getShapesForMap(): Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }> {
+    const result: Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }> = [];
+    this.shapes.forEach((points, shapeId) => {
+      result.push({
+        id: shapeId,
+        coordinates: points.map(p => ({
+          latitude: p.shape_pt_lat,
+          longitude: p.shape_pt_lon,
+        })),
+      });
+    });
+    return result;
+  }
+
+  // Get shapes grouped by route
+  getShapesByRoute(): Map<string, Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>> {
+    const shapesByRoute = new Map<string, Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>>();
+    
+    // Get all unique trips grouped by route
+    const tripsByRoute = new Map<string, Set<string>>();
+    const shapesByTrip = new Map<string, string>();
+    
+    // This requires access to trips data, which we need to load separately
+    // For now, return all shapes grouped together
+    const allShapes = this.getShapesForMap();
+    shapesByRoute.set('all', allShapes);
+    return shapesByRoute;
   }
 }
 
