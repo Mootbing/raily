@@ -29,7 +29,7 @@ export function clusterStations(
   latitudeDelta: number
 ): StationCluster[] {
   // If zoomed in enough (< 3.0 degrees), show individual stations
-  if (latitudeDelta < 3.0) {
+  if (latitudeDelta < 5.0) {
     return stations.map(station => ({
       id: station.id,
       lat: station.lat,
