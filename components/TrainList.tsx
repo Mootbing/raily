@@ -1,6 +1,6 @@
+import { TrainTrack } from 'lucide-react-native';
 import React from 'react';
 import { Image, Text, TouchableOpacity, View } from 'react-native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, styles } from '../screens/styles';
 import type { Train } from '../types/train';
@@ -43,8 +43,8 @@ export function TrainList({ flights, onTrainSelect }: { flights: Train[]; onTrai
   if (flights.length === 0) {
     return (
       <View style={styles.noTrainsContainer}>
-        <Ionicons name="train" size={48} color={COLORS.primary} />
-        <Text style={styles.noTrainsText}>no trains yet...</Text>
+        <TrainTrack size={48} color={COLORS.primary} />
+        <Text style={styles.noTrainsText}>No saved trips yet</Text>
       </View>
     );
   }
@@ -82,14 +82,6 @@ export function TrainList({ flights, onTrainSelect }: { flights: Train[]; onTrai
                   {flight.routeName ? flight.routeName : flight.operator} {flight.trainNumber}
                 </Text>
                 <Text style={styles.flightDate}>{flight.date}</Text>
-                {flight.realtime?.status && (
-                  <View style={[
-                    styles.realtimeBadge,
-                    flight.realtime.delay && flight.realtime.delay > 0 ? styles.delayedBadge : styles.onTimeBadge
-                  ]}>
-                    <Text style={styles.realtimeBadgeText}>{flight.realtime.status}</Text>
-                  </View>
-                )}
               </View>
 
               {/*

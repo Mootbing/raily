@@ -1,12 +1,8 @@
 /**
  * GTFS data parser for Amtrak trains
- * Loads and parses GTFS (General Transit Feed Specification) data from JSON files
+ * Data is populated dynamically via gtfs-sync service - no bundled fallback data
  */
 
-import routesData from '../assets/gtfs-data/routes.json';
-import shapesData from '../assets/gtfs-data/shapes.json';
-import stopTimesData from '../assets/gtfs-data/stop-times.json';
-import stopsData from '../assets/gtfs-data/stops.json';
 import type {
   EnrichedStopTime,
   Route,
@@ -21,31 +17,14 @@ export class GTFSParser {
   private stops: Map<string, Stop> = new Map();
   private stopTimes: Map<string, StopTime[]> = new Map();
   private shapes: Map<string, Shape[]> = new Map();
+  private _isLoaded: boolean = false;
 
   constructor() {
-    this.loadData();
+    // Parser starts empty - data is loaded dynamically via overrideData()
   }
 
-  private loadData(): void {
-    // Load routes
-    routesData.forEach(route => {
-      this.routes.set(route.route_id, route);
-    });
-
-    // Load stops
-    stopsData.forEach(stop => {
-      this.stops.set(stop.stop_id, stop);
-    });
-
-    // Load stop times
-    Object.entries(stopTimesData).forEach(([tripId, times]) => {
-      this.stopTimes.set(tripId, times as StopTime[]);
-    });
-
-    // Load shapes
-    Object.entries(shapesData).forEach(([shapeId, points]) => {
-      this.shapes.set(shapeId, points as Shape[]);
-    });
+  get isLoaded(): boolean {
+    return this._isLoaded;
   }
 
   // Override parser data with dynamically fetched cache
@@ -67,6 +46,8 @@ export class GTFSParser {
     Object.entries(shapes).forEach(([shapeId, points]) => {
       if (shapeId && Array.isArray(points)) this.shapes.set(shapeId, points);
     });
+
+    this._isLoaded = this.routes.size > 0 && this.stops.size > 0;
   }
 
   getRouteName(routeId: string): string {
@@ -142,10 +123,9 @@ export class GTFSParser {
 
   search(query: string): SearchResult[] {
     const results: SearchResult[] = [];
-    let queryLower = query.toLowerCase();
+    const queryLower = query.toLowerCase();
     // Support searching by AMT{train}, {name}{train}, or just {train}
     let trainNumberQuery = '';
-    let namePrefix = '';
     // If query starts with 'amt', treat as AMT{train}
     if (queryLower.startsWith('amt')) {
       trainNumberQuery = queryLower.substring(3);
@@ -153,7 +133,6 @@ export class GTFSParser {
       // Try to match {name}{train} pattern (e.g., acela2150, crescent19)
       const nameTrainMatch = queryLower.match(/^([a-z]+)(\d{1,4})$/);
       if (nameTrainMatch) {
-        namePrefix = nameTrainMatch[1];
         trainNumberQuery = nameTrainMatch[2];
       }
     }
@@ -202,21 +181,12 @@ export class GTFSParser {
     this.stopTimes.forEach((times, tripId) => {
       // Add search by train number, AMT{train}, or {name}{train}
       const tripIdLower = tripId.toLowerCase();
-      // Find route name for this trip if available
-      let routeName = '';
-      // Try to get route name from the first stop's route if possible
-      if (times.length > 0 && times[0].route_id) {
-        routeName = (this.routes.get(times[0].route_id)?.route_long_name || '').toLowerCase();
-      }
       // Check for AMT{train} or {name}{train} match
-      if (
-        (trainNumberQuery && tripIdLower.endsWith(trainNumberQuery) &&
-          (!namePrefix || (routeName && routeName.replace(/\s/g, '').startsWith(namePrefix))))
-      ) {
+      if (trainNumberQuery && tripIdLower.endsWith(trainNumberQuery)) {
         results.push({
           id: `tripid-${tripId}`,
-          name: routeName ? `${this.routes.get(times[0].route_id)?.route_long_name} ${tripId}` : `Train ${tripId}`,
-          subtitle: routeName ? `(${routeName})` : '',
+          name: `Train ${tripId}`,
+          subtitle: '',
           type: 'train',
           data: { trip_id: tripId },
         });
@@ -273,16 +243,82 @@ export class GTFSParser {
   // Get shapes grouped by route
   getShapesByRoute(): Map<string, Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>> {
     const shapesByRoute = new Map<string, Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>>();
-    
-    // Get all unique trips grouped by route
-    const tripsByRoute = new Map<string, Set<string>>();
-    const shapesByTrip = new Map<string, string>();
-    
-    // This requires access to trips data, which we need to load separately
-    // For now, return all shapes grouped together
+    // Return all shapes grouped together
     const allShapes = this.getShapesForMap();
     shapesByRoute.set('all', allShapes);
     return shapesByRoute;
+  }
+
+  /**
+   * Search for stations only (for the two-station search flow)
+   */
+  searchStations(query: string): Stop[] {
+    const queryLower = query.toLowerCase();
+    const results: Stop[] = [];
+
+    this.stops.forEach((stop) => {
+      if (
+        stop.stop_name.toLowerCase().includes(queryLower) ||
+        stop.stop_id.toLowerCase().includes(queryLower)
+      ) {
+        results.push(stop);
+      }
+    });
+
+    return results.slice(0, 10);
+  }
+
+  /**
+   * Find all trips that stop at both stations in sequence (fromStop before toStop)
+   */
+  findTripsWithStops(fromStopId: string, toStopId: string): Array<{
+    tripId: string;
+    fromStop: EnrichedStopTime;
+    toStop: EnrichedStopTime;
+    intermediateStops: EnrichedStopTime[];
+  }> {
+    const results: Array<{
+      tripId: string;
+      fromStop: EnrichedStopTime;
+      toStop: EnrichedStopTime;
+      intermediateStops: EnrichedStopTime[];
+    }> = [];
+
+    this.stopTimes.forEach((times, tripId) => {
+      const fromIdx = times.findIndex(t => t.stop_id === fromStopId);
+      const toIdx = times.findIndex(t => t.stop_id === toStopId);
+
+      // Both stops must exist and fromStop must come before toStop
+      if (fromIdx !== -1 && toIdx !== -1 && fromIdx < toIdx) {
+        const fromStop = times[fromIdx];
+        const toStop = times[toIdx];
+        const intermediateStops = times.slice(fromIdx + 1, toIdx);
+
+        results.push({
+          tripId,
+          fromStop: {
+            ...fromStop,
+            stop_name: this.getStopName(fromStop.stop_id),
+            stop_code: fromStop.stop_id,
+          },
+          toStop: {
+            ...toStop,
+            stop_name: this.getStopName(toStop.stop_id),
+            stop_code: toStop.stop_id,
+          },
+          intermediateStops: intermediateStops.map(s => ({
+            ...s,
+            stop_name: this.getStopName(s.stop_id),
+            stop_code: s.stop_id,
+          })),
+        });
+      }
+    });
+
+    // Sort by departure time
+    results.sort((a, b) => a.fromStop.departure_time.localeCompare(b.fromStop.departure_time));
+
+    return results;
   }
 }
 

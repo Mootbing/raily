@@ -118,6 +118,17 @@ export class ShapeLoader {
   }
 
   /**
+   * Get all shapes without viewport filtering
+   */
+  getAllShapes(): VisibleShape[] {
+    const all: VisibleShape[] = [];
+    for (const [shapeId, coordinates] of this.shapeCoordinates) {
+      all.push({ id: shapeId, coordinates });
+    }
+    return all;
+  }
+
+  /**
    * Get statistics about loaded shapes
    */
   getStats() {

@@ -1,94 +1,39 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useContext, useEffect, useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { FrequentlyUsedList } from '../components/FrequentlyUsedList';
-import { SearchBar } from '../components/SearchBar';
 import { TrainList } from '../components/TrainList';
+import { TwoStationSearch } from '../components/TwoStationSearch';
 import { SlideUpModalContext } from '../components/ui/slide-up-modal';
 import { useTrainContext } from '../context/TrainContext';
 import { useFrequentlyUsed } from '../hooks/useFrequentlyUsed';
-import { TrainAPIService } from '../services/api';
-import { ensureFreshGTFS, hasCachedGTFS, isCacheStale } from '../services/gtfs-sync';
+import { ensureFreshGTFS, hasCachedGTFS, isCacheStale, loadCachedGTFS } from '../services/gtfs-sync';
 import { TrainStorageService } from '../services/storage';
-import type { Train } from '../types/train';
+import type { SavedTrainRef, Train } from '../types/train';
 import { COLORS, styles } from './styles';
 
-function SearchResults({ 
-  query, 
-  onSelectResult 
-}: { 
-  query: string; 
-  onSelectResult: (result: any) => void;
-}) {
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const searchTrains = async () => {
-      setLoading(true);
-      const searchResults = await TrainAPIService.search(query);
-      setResults(searchResults);
-      setLoading(false);
-    };
-    searchTrains();
-  }, [query]);
-
-  if (loading) {
-    return (
-      <View style={styles.frequentlyUsedItem}>
-        <Text style={styles.frequentlyUsedName}>Searching...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <>
-      {results.map((result) => (
-        <TouchableOpacity
-          key={result.id}
-          style={styles.frequentlyUsedItem}
-          activeOpacity={0.7}
-          onPress={() => onSelectResult(result)}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel={`${result.name}, ${result.subtitle}`}
-          accessibilityHint={`Select ${result.type} ${result.name}`}
-        >
-          <View style={styles.frequentlyUsedIcon}>
-            {result.type === 'train' && (
-              <Ionicons name="train" size={24} color={COLORS.primary} />
-            )}
-            {result.type === 'station' && (
-              <Ionicons name="location" size={24} color={COLORS.primary} />
-            )}
-            {result.type === 'route' && (
-              <Ionicons name="train" size={24} color={COLORS.primary} />
-            )}
-          </View>
-          <View style={styles.frequentlyUsedText}>
-            <Text style={styles.frequentlyUsedName}>{result.name}</Text>
-            <Text style={styles.frequentlyUsedSubtitle}>{result.subtitle}</Text>
-          </View>
-          <Ionicons name="arrow-forward" size={20} color={COLORS.secondary} />
-        </TouchableOpacity>
-      ))}
-    </>
-  );
-}
-
 export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train) => void }) {
-  const { isFullscreen, isCollapsed, scrollOffset, panGesture, snapToPoint } = useContext(SlideUpModalContext);
-  const [imageError, setImageError] = useState(false);
+  const { isFullscreen, isCollapsed, scrollOffset, panGesture, snapToPoint, setGestureEnabled } = useContext(SlideUpModalContext);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const { savedTrains, setSavedTrains, setSelectedTrain } = useTrainContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingCache, setIsLoadingCache] = useState(true); // Start true - loading on mount
   const [refreshProgress, setRefreshProgress] = useState(0);
   const [refreshStep, setRefreshStep] = useState('');
   const [refreshPhases, setRefreshPhases] = useState<string[]>([]);
-  const searchInputRef = React.useRef<TextInput>(null);
-  const { items: frequentlyUsed, refresh: refreshFrequentlyUsed } = useFrequentlyUsed();
+  const { refresh: refreshFrequentlyUsed } = useFrequentlyUsed();
+
+  // Refs to avoid stale closures in useEffect
+  const refreshFrequentlyUsedRef = useRef(refreshFrequentlyUsed);
+  refreshFrequentlyUsedRef.current = refreshFrequentlyUsed;
+  const snapToPointRef = useRef(snapToPoint);
+  snapToPointRef.current = snapToPoint;
+
+  // Combined loading state for UI
+  const isLoading = isRefreshing || isLoadingCache;
+
+  // Track if initialization has run
+  const hasInitialized = useRef(false);
 
   // Load saved trains from storage service
   useEffect(() => {
@@ -99,21 +44,64 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
     loadSavedTrains();
   }, [setSavedTrains]);
 
-  // Check if GTFS needs refresh on mount (weekly refresh)
+  // Disable modal resizing when loading or refreshing GTFS data
   useEffect(() => {
-    const checkAndRefreshGTFS = async () => {
-      const hasCache = await hasCachedGTFS();
-      const stale = await isCacheStale();
+    setGestureEnabled?.(!isLoading);
+  }, [isLoading, setGestureEnabled]);
 
-      if (!hasCache || stale) {
-        // Automatically trigger refresh if no cache or stale
-        setIsRefreshing(true);
-        setRefreshProgress(0.05);
-        setRefreshStep('Checking GTFS cache');
-        setIsSearchFocused(false);
-        snapToPoint?.('min');
+  // Load cached GTFS and check if refresh is needed on mount (runs once)
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
 
-        try {
+    const initializeGTFS = async () => {
+      setIsLoadingCache(true);
+      setRefreshStep('Loading cached data...');
+      setRefreshProgress(0.1);
+      snapToPointRef.current?.('min');
+
+      try {
+        // First, try to load from cache
+        const loaded = await loadCachedGTFS();
+
+        if (loaded) {
+          // Cache loaded successfully, check if it's stale
+          const stale = await isCacheStale();
+          if (stale) {
+            // Cache is stale, need to refresh
+            setIsLoadingCache(false);
+            setIsRefreshing(true);
+            setRefreshProgress(0.05);
+            setRefreshStep('Checking GTFS cache');
+
+            setRefreshPhases([]);
+            await ensureFreshGTFS((update) => {
+              setRefreshProgress(update.progress);
+              setRefreshStep(update.step + (update.detail ? ` • ${update.detail}` : ''));
+              setRefreshPhases(prev => {
+                if (prev.length === 0 || prev[prev.length - 1] !== update.step) {
+                  return [...prev, update.step];
+                }
+                return prev;
+              });
+            });
+            await refreshFrequentlyUsedRef.current();
+            setRefreshProgress(1);
+            setRefreshStep('Refresh complete');
+            setIsRefreshing(false);
+          } else {
+            // Cache is fresh, we're done
+            setRefreshProgress(1);
+            setRefreshStep('Ready');
+            setIsLoadingCache(false);
+          }
+        } else {
+          // No cache, need to fetch fresh data
+          setIsLoadingCache(false);
+          setIsRefreshing(true);
+          setRefreshProgress(0.05);
+          setRefreshStep('Downloading schedule data');
+
           setRefreshPhases([]);
           await ensureFreshGTFS((update) => {
             setRefreshProgress(update.progress);
@@ -125,43 +113,36 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
               return prev;
             });
           });
-          await refreshFrequentlyUsed();
+          await refreshFrequentlyUsedRef.current();
           setRefreshProgress(1);
           setRefreshStep('Refresh complete');
-          setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh complete' ? prev : [...prev, 'Refresh complete']);
-        } catch (error) {
-          console.error('Auto refresh failed:', error);
-          setRefreshStep('Refresh failed');
-          setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh failed' ? prev : [...prev, 'Refresh failed']);
-        } finally {
           setIsRefreshing(false);
         }
+      } catch (error) {
+        console.error('GTFS initialization failed:', error);
+        setRefreshStep('Failed to load data');
+        setIsLoadingCache(false);
+        setIsRefreshing(false);
       }
     };
 
-    checkAndRefreshGTFS();
-  }, [snapToPoint, refreshFrequentlyUsed]);
+    initializeGTFS();
+  }, []);
 
-  // Store valid tripIds in memory and AsyncStorage
-  const [validTripIds, setValidTripIds] = useState<string[]>([]);
-
-  const saveTrain = async (train: Train) => {
-    if (!train.tripId) return;
-    // Add tripId to memory and AsyncStorage
-    setValidTripIds((prev) => {
-      if (!prev.includes(train.tripId!)) {
-        const updated = [...prev, train.tripId!];
-        AsyncStorage.setItem('validTripIds', JSON.stringify(updated));
-        return updated;
-      }
-      return prev;
-    });
-    // Save train as before
-    const saved = await TrainStorageService.saveTrain(train);
+  // Save train with segmentation support
+  const saveTrainWithSegment = async (tripId: string, fromCode: string, toCode: string) => {
+    const ref: SavedTrainRef = {
+      tripId,
+      fromCode,
+      toCode,
+      savedAt: Date.now(),
+    };
+    const saved = await TrainStorageService.saveTrainRef(ref);
     if (saved) {
       const updatedTrains = await TrainStorageService.getSavedTrains();
       setSavedTrains(updatedTrains);
     }
+    return saved;
   };
 
   // Manual refresh handler
@@ -252,12 +233,24 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
   useEffect(() => {
     if (isCollapsed && isSearchFocused) {
       setIsSearchFocused(false);
-      setSearchQuery('');
     }
   }, [isCollapsed, isSearchFocused]);
 
-  // This effect was causing the modal to bounce back to bottom
-  // Removed - let users manually control modal position
+  const handleOpenSearch = () => {
+    snapToPoint?.('max');
+    setIsSearchFocused(true);
+  };
+
+  const handleCloseSearch = () => {
+    setIsSearchFocused(false);
+    snapToPoint?.('min');
+  };
+
+  const handleSelectTrip = async (tripId: string, fromCode: string, toCode: string) => {
+    await saveTrainWithSegment(tripId, fromCode, toCode);
+    setIsSearchFocused(false);
+    snapToPoint?.('min');
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -265,10 +258,10 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
       <View>
         <View style={styles.titleRow}>
           <Text style={styles.title}>
-            {isRefreshing ? 'Fetching' : (isSearchFocused ? 'Add Train' : 'My Trains')}
+            {isLoading ? (isLoadingCache ? 'Loading' : 'Fetching') : (isSearchFocused ? 'Add Train' : 'My Trains')}
           </Text>
         </View>
-        {!isSearchFocused && !isRefreshing && (
+        {!isSearchFocused && !isLoading && (
           <TouchableOpacity
             onPress={handleRefresh}
             style={styles.refreshButton}
@@ -281,12 +274,11 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
               name="refresh"
               size={24}
               color={COLORS.primary}
-              style={isRefreshing ? styles.refreshIconSpinning : undefined}
             />
           </TouchableOpacity>
         )}
 
-        {isRefreshing && (
+        {isLoading && (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 32 }}>
             <Ionicons name="train" size={48} color={COLORS.secondary} style={{ marginBottom: 16 }} />
             <View style={{ width: 240, alignItems: 'center' }}>
@@ -295,34 +287,38 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
                 numberOfLines={2}
                 ellipsizeMode="tail"
               >
-                {refreshStep || 'Refreshing GTFS data...'}
+                {refreshStep || (isLoadingCache ? 'Loading cached data...' : 'Refreshing GTFS data...')}
               </Text>
               <View style={{ width: '100%', height: 6, backgroundColor: COLORS.border.secondary, borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
                 <View style={{ height: '100%', backgroundColor: COLORS.accentBlue, borderRadius: 999, width: `${Math.max(5, refreshProgress * 100)}%` }} />
               </View>
               <Text style={[styles.progressValue, { marginBottom: 12, fontSize: 13, fontWeight: '600' }]}>{Math.round(refreshProgress * 100)}%</Text>
-              <Text style={[styles.frequentlyUsedSubtitle, { fontSize: 11, textAlign: 'center', fontStyle: 'italic', marginTop: 4 }]}>
-                This happens once per week to keep schedules current
-              </Text>
+              {!isLoadingCache && (
+                <Text style={[styles.frequentlyUsedSubtitle, { fontSize: 11, textAlign: 'center', fontStyle: 'italic', marginTop: 4 }]}>
+                  This happens once per week to keep schedules current
+                </Text>
+              )}
             </View>
           </View>
         )}
 
         {isSearchFocused && (
-          <Text style={styles.subtitle}>Add any amtrak train (for now)</Text>
+          <Text style={styles.subtitle}>Enter departure and arrival stations</Text>
         )}
 
-        {!isRefreshing && (
-          <View style={{ paddingHorizontal: 0, marginBottom: 0 }}>
-            <SearchBar
-              isSearchFocused={isSearchFocused}
-              searchQuery={searchQuery}
-              setIsSearchFocused={setIsSearchFocused}
-              setSearchQuery={setSearchQuery}
-              snapToPoint={snapToPoint}
-              searchInputRef={searchInputRef}
-            />
-          </View>
+        {/* Search Button (when not searching) */}
+        {!isLoading && !isSearchFocused && (
+          <TouchableOpacity
+            style={styles.searchContainer}
+            activeOpacity={0.7}
+            onPress={handleOpenSearch}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Add a train"
+          >
+            <Ionicons name="search" size={20} color={COLORS.secondary} />
+            <Text style={styles.searchButtonText}>Start your journey...</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -337,52 +333,15 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
         }}
         scrollEventThrottle={16}
         simultaneousHandlers={panGesture}
+        keyboardShouldPersistTaps="handled"
       >
         {isSearchFocused && !isCollapsed && (
-          <View style={styles.frequentlyUsedSection}>
-            <Text style={styles.sectionLabel}>
-              {searchQuery ? 'SEARCH RESULTS' : 'FREQUENTLY USED'}
-            </Text>
-            {searchQuery ? (
-              <SearchResults
-                query={searchQuery}
-                onSelectResult={async (result) => {
-                  if (result.type === 'train') {
-                    const tripData = result.data as { trip_id: string };
-                    const trainObj = await TrainAPIService.getTrainDetails(tripData.trip_id);
-                    if (trainObj) {
-                      await saveTrain(trainObj);
-                      onTrainSelect && onTrainSelect(trainObj);
-                      setSearchQuery('');
-                      setIsSearchFocused(false);
-                    }
-                  } else if (result.type === 'station') {
-                    const stopData = result.data as { stop_id: string, lat?: number, lon?: number };
-                    let lat = result.lat, lon = result.lon;
-                    if (lat == null || lon == null) {
-                      const stop = (typeof stopData.stop_id === 'string') ? (require('../utils/gtfs-parser').gtfsParser.getStop(stopData.stop_id)) : null;
-                      lat = stop?.stop_lat;
-                      lon = stop?.stop_lon;
-                    }
-                    if (lat != null && lon != null) {
-                      onTrainSelect && onTrainSelect({ lat, lon });
-                      setSearchQuery('');
-                      setIsSearchFocused(false);
-                    }
-                  }
-                }}
-              />
-            ) : (
-              <FrequentlyUsedList
-                items={frequentlyUsed}
-                onSelect={(item) => {
-                  // TODO: Implement selection
-                }}
-              />
-            )}
-          </View>
+          <TwoStationSearch
+            onSelectTrip={handleSelectTrip}
+            onClose={handleCloseSearch}
+          />
         )}
-        {!isSearchFocused && !isRefreshing && (
+        {!isSearchFocused && !isLoading && (
           <TrainList flights={flights} onTrainSelect={(train) => {
             setSelectedTrain(train);
             if (typeof onTrainSelect === 'function') onTrainSelect(train);

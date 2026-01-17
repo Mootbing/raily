@@ -3,11 +3,11 @@ import React, { createContext, useEffect, useState } from 'react';
 import { Dimensions, Platform, StatusBar, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
 
@@ -26,6 +26,7 @@ export const SlideUpModalContext = createContext<{
   panGesture: any;
   modalHeight: any;
   snapToPoint?: (point: 'min' | 'half' | 'max') => void;
+  setGestureEnabled?: (enabled: boolean) => void;
 }>({
   isFullscreen: false,
   isCollapsed: false,
@@ -57,6 +58,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   const modalHeight = useSharedValue(SNAP_POINTS.HALF);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [gestureEnabled, setGestureEnabled] = useState(true);
   const glowOpacity = useSharedValue(0);
 
   React.useImperativeHandle(ref, () => ({
@@ -100,6 +102,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   const panGesture = Gesture.Pan()
     .enableTrackpadTwoFingerGesture(true)
     .maxPointers(1)
+    .enabled(gestureEnabled)
     .onStart(() => {
       context.value = { y: translateY.value };
     })
@@ -168,8 +171,8 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
       }
 
       translateY.value = withSpring(targetY, {
-        damping: 40,
-        stiffness: 280,
+        damping: 28,
+        stiffness: 400,
         overshootClamping: false,
       });
     })
@@ -263,7 +266,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   return (
     <GestureDetector gesture={panGesture}>
       <Animated.View style={[styles.container, animatedStyle]}>
-        <SlideUpModalContext.Provider value={{ isFullscreen, isCollapsed, scrollOffset, panGesture, modalHeight, snapToPoint }}>
+        <SlideUpModalContext.Provider value={{ isFullscreen, isCollapsed, scrollOffset, panGesture, modalHeight, snapToPoint, setGestureEnabled }}>
           <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut}>
             <Animated.View
               style={[

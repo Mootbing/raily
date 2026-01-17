@@ -91,7 +91,7 @@ export interface SearchResult {
   name: string;
   subtitle: string;
   type: SearchResultType;
-  data: Stop | Trip | Route | { trip_id: string; stop_id: string; stop_name: string };
+  data: Stop | Trip | Route | { trip_id: string; stop_id?: string; stop_name?: string };
 }
 
 export interface FrequentlyUsedItem {
@@ -100,4 +100,15 @@ export interface FrequentlyUsedItem {
   code: string;
   subtitle: string;
   type: 'train' | 'station';
+}
+
+/**
+ * Lightweight saved train reference for local storage.
+ * Contains only the essential IDs needed to reconstruct the full train data.
+ */
+export interface SavedTrainRef {
+  tripId: string;           // Primary identifier for the train trip
+  fromCode?: string;        // Optional: user's boarding station (for segmented trips)
+  toCode?: string;          // Optional: user's destination station (for segmented trips)
+  savedAt: number;          // Timestamp when saved
 }

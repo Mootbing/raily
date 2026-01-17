@@ -1,4 +1,4 @@
-import { Platform, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { AppColors, BorderRadius, FontSizes, Spacing } from '../constants/theme';
 
 export const COLORS = AppColors;
@@ -24,11 +24,11 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.lg,
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.sm },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.lg },
   title: { fontSize: FontSizes.title, fontWeight: 'bold', fontFamily: FONTS.family, color: COLORS.primary },
   refreshButton: {
     position: 'absolute',
-    top: -10,
+    top: -12,
     right: 0,
     zIndex: 20,
     width: 48,

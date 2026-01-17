@@ -267,9 +267,8 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
     report('Refresh complete', 1, 'Applied latest GTFS');
     return { usedCache: false };
   } catch (err) {
-    console.warn('GTFS sync failed; falling back to bundled assets.', err);
-    onProgress?.({ step: 'GTFS refresh failed', progress: 1, detail: 'Using bundled assets' });
-    console.error('[GTFS Refresh] GTFS sync failed; using bundled assets.', err);
+    console.error('[GTFS Refresh] GTFS sync failed:', err);
+    onProgress?.({ step: 'GTFS refresh failed', progress: 1, detail: 'Check network connection' });
     return { usedCache: true };
   }
 }
@@ -285,4 +284,29 @@ export async function isCacheStale(): Promise<boolean> {
   const lastFetchStr = await AsyncStorage.getItem(STORAGE_KEYS.LAST_FETCH);
   const lastFetchMs = lastFetchStr ? parseInt(lastFetchStr, 10) : 0;
   return !lastFetchMs || isOlderThanDays(lastFetchMs, 7);
+}
+
+/**
+ * Load cached GTFS data into the parser (called on app startup)
+ * This doesn't check staleness - just loads whatever is cached
+ */
+export async function loadCachedGTFS(): Promise<boolean> {
+  try {
+    const routes = await readJSONFromFile<Route[]>(GTFS_FILES.routes);
+    const stops = await readJSONFromFile<Stop[]>(GTFS_FILES.stops);
+    const stopTimes = await readJSONFromFile<Record<string, StopTime[]>>(GTFS_FILES.stopTimes);
+    const shapes = await readJSONFromFile<Record<string, Shape[]>>(GTFS_FILES.shapes);
+
+    if (routes && stops && stopTimes) {
+      gtfsParser.overrideData(routes, stops, stopTimes, shapes || {});
+      shapeLoader.initialize(shapes || {});
+      console.log('[GTFS] Loaded cached data on startup');
+      return true;
+    }
+    console.log('[GTFS] No cached data found');
+    return false;
+  } catch (error) {
+    console.error('[GTFS] Failed to load cached data:', error);
+    return false;
+  }
 }

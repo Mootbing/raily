@@ -82,22 +82,10 @@ function MapScreenInner() {
 
   useRealtime(savedTrains, setSavedTrains, 20000);
 
-  const { visibleShapes, updateBounds } = useShapes({
-    minLat: region.latitude - region.latitudeDelta / 2,
-    maxLat: region.latitude + region.latitudeDelta / 2,
-    minLon: region.longitude - region.longitudeDelta / 2,
-    maxLon: region.longitude + region.longitudeDelta / 2,
-  });
+  const { visibleShapes } = useShapes();
 
   const handleRegionChangeComplete = (newRegion: any) => {
     setRegion(newRegion);
-    // Update bounds only after user finishes panning/zooming for better performance
-    updateBounds({
-      minLat: newRegion.latitude - newRegion.latitudeDelta / 2,
-      maxLat: newRegion.latitude + newRegion.latitudeDelta / 2,
-      minLon: newRegion.longitude - newRegion.longitudeDelta / 2,
-      maxLon: newRegion.longitude + newRegion.longitudeDelta / 2,
-    });
   };
 
   const handleRecenter = async () => {
