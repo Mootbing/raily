@@ -291,7 +291,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
             <DateTimePicker
               value={tempDate}
               mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
               onChange={handleDateChange}
               minimumDate={new Date()}
               themeVariant="dark"
@@ -520,7 +520,6 @@ const styles = StyleSheet.create({
   },
   datePicker: {
     width: '100%',
-    height: 200,
   },
   confirmDateButton: {
     backgroundColor: '#FFFFFF',

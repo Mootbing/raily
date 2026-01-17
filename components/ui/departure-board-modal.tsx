@@ -1,6 +1,8 @@
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -37,7 +39,7 @@ function formatDateDisplay(date: Date): string {
   } else if (targetDate.getTime() === tomorrow.getTime()) {
     return 'Tomorrow';
   } else {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 }
 
@@ -85,6 +87,7 @@ export default function DepartureBoardModal({
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const { isCollapsed, scrollOffset } = React.useContext(SlideUpModalContext);
 
@@ -151,6 +154,32 @@ export default function DepartureBoardModal({
     return selected.getTime() > today.getTime();
   }, [selectedDate]);
 
+  // Handle date picker change
+  const handleDateChange = useCallback(
+    (event: DateTimePickerEvent, date?: Date) => {
+      // On Android, the picker closes automatically; on iOS, we need to handle it
+      if (Platform.OS === 'android') {
+        setShowDatePicker(false);
+      }
+      if (event.type === 'set' && date) {
+        // Ensure date is not in the past
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const newDate = new Date(date);
+        newDate.setHours(0, 0, 0, 0);
+        if (newDate.getTime() >= today.getTime()) {
+          setSelectedDate(date);
+        }
+      }
+    },
+    []
+  );
+
+  // Close date picker on iOS
+  const handleDatePickerDone = useCallback(() => {
+    setShowDatePicker(false);
+  }, []);
+
   const handleTrainPress = useCallback(
     (train: Train) => {
       // Update the train's fromCode to be this station
@@ -194,28 +223,6 @@ export default function DepartureBoardModal({
 
       {!isCollapsed && (
         <>
-          {/* Date Selector */}
-          <View style={styles.dateSelector}>
-            <TouchableOpacity
-              style={[styles.dateArrow, !canGoBack && styles.dateArrowDisabled]}
-              onPress={() => canGoBack && navigateDate('prev')}
-              disabled={!canGoBack}
-            >
-              <Ionicons
-                name="chevron-back"
-                size={20}
-                color={canGoBack ? AppColors.primary : AppColors.tertiary}
-              />
-            </TouchableOpacity>
-            <View style={styles.dateDisplay}>
-              <Ionicons name="calendar-outline" size={16} color={AppColors.secondary} />
-              <Text style={styles.dateText}>{formatDateDisplay(selectedDate)}</Text>
-            </View>
-            <TouchableOpacity style={styles.dateArrow} onPress={() => navigateDate('next')}>
-              <Ionicons name="chevron-forward" size={20} color={AppColors.primary} />
-            </TouchableOpacity>
-          </View>
-
           {/* Search Bar */}
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={18} color={AppColors.secondary} />
@@ -235,7 +242,53 @@ export default function DepartureBoardModal({
             )}
           </View>
 
-          <View style={styles.divider} />
+          {/* Date Selector */}
+          <View style={styles.dateSelector}>
+            <TouchableOpacity
+              style={[styles.dateArrow, !canGoBack && styles.dateArrowDisabled]}
+              onPress={() => canGoBack && navigateDate('prev')}
+              disabled={!canGoBack}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={canGoBack ? AppColors.primary : AppColors.tertiary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dateDisplay}
+              onPress={() => setShowDatePicker(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="calendar-outline" size={16} color={AppColors.secondary} />
+              <Text style={styles.dateText}>{formatDateDisplay(selectedDate)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dateArrow} onPress={() => navigateDate('next')}>
+              <Ionicons name="chevron-forward" size={20} color={AppColors.primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Date Picker */}
+          {showDatePicker && (
+            <View style={styles.datePickerContainer}>
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                onChange={handleDateChange}
+                minimumDate={new Date()}
+                themeVariant="dark"
+              />
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  style={styles.datePickerDoneButton}
+                  onPress={handleDatePickerDone}
+                >
+                  <Text style={styles.datePickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           {/* Departures List */}
           {loading ? (
@@ -327,7 +380,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingLeft: Spacing.xl,
-    paddingRight: Spacing.sm,
+    paddingRight: Spacing.xl,
     paddingTop: 0,
     paddingBottom: Spacing.xl,
     flexDirection: 'row',
@@ -352,9 +405,8 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 0,
-    right: 10,
     zIndex: 20,
+    right:0,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -402,6 +454,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: AppColors.primary,
   },
+  datePickerContainer: {
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.md,
+    backgroundColor: AppColors.background.secondary,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+  },
+  datePickerDoneButton: {
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.border.primary,
+  },
+  datePickerDoneText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: AppColors.accent,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -417,12 +487,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: AppColors.primary,
     paddingVertical: Spacing.xs,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: AppColors.tertiary,
-    marginHorizontal: Spacing.xl,
-    marginVertical: Spacing.lg,
   },
   loadingContainer: {
     flex: 1,
