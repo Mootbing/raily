@@ -2,6 +2,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   Platform,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
@@ -79,6 +82,33 @@ function isTrainUpcoming(train: Train, selectedDate: Date): boolean {
   return trainMinutes > currentMinutes - 5; // 5 minute grace period
 }
 
+/**
+ * Get the departure time for a specific station from a train's stops
+ * Returns the time at the station, or falls back to origin departure time
+ */
+function getStationDepartureTime(train: Train, stationId: string): { time: string; dayOffset?: number } {
+  // If station is the origin, use departTime
+  if (train.fromCode === stationId) {
+    return { time: train.departTime, dayOffset: train.departDayOffset };
+  }
+
+  // If station is the destination, use arriveTime
+  if (train.toCode === stationId) {
+    return { time: train.arriveTime, dayOffset: train.arriveDayOffset };
+  }
+
+  // Check intermediate stops for the station
+  if (train.intermediateStops) {
+    const stop = train.intermediateStops.find(s => s.code === stationId);
+    if (stop) {
+      return { time: stop.time, dayOffset: undefined };
+    }
+  }
+
+  // Fallback to origin departure time
+  return { time: train.departTime, dayOffset: train.departDayOffset };
+}
+
 export default function DepartureBoardModal({
   station,
   onClose,
@@ -92,7 +122,10 @@ export default function DepartureBoardModal({
   const [isScrolled, setIsScrolled] = useState(false);
   const [filterMode, setFilterMode] = useState<'all' | 'departures' | 'arrivals'>('all');
 
-  const { isCollapsed, scrollOffset } = React.useContext(SlideUpModalContext);
+  const { isCollapsed, isFullscreen, scrollOffset } = React.useContext(SlideUpModalContext);
+
+  // Check if modal is at half height (not collapsed and not fullscreen)
+  const isHalfHeight = !isCollapsed && !isFullscreen;
 
   // Fetch departures for the station
   useEffect(() => {
@@ -136,7 +169,10 @@ export default function DepartureBoardModal({
 
       // Filter by departure/arrival mode
       if (filterMode !== 'all') {
-        const isDeparture = train.fromCode === station.stop_id;
+        // For departures: show all trains that pass through EXCEPT final destination
+        // (any train stopping here that continues onward is a "departure")
+        const isDeparture = train.toCode !== station.stop_id;
+        // For arrivals: only show trains where this station is the final destination
         const isArrival = train.toCode === station.stop_id;
         if (filterMode === 'departures' && !isDeparture) return false;
         if (filterMode === 'arrivals' && !isArrival) return false;
@@ -203,15 +239,36 @@ export default function DepartureBoardModal({
 
   const handleTrainPress = useCallback(
     (train: Train) => {
-      // Update the train's fromCode to be this station
-      const updatedTrain: Train = {
-        ...train,
-        fromCode: station.stop_id,
-        from: station.stop_name,
-      };
+      // For arrivals: keep original origin, set destination to this station
+      // For departures/all: set origin to this station, keep original destination
+      // Also update the departure/arrival times to match the station
+      const stationTime = getStationDepartureTime(train, station.stop_id);
+      const updatedTrain: Train = filterMode === 'arrivals'
+        ? {
+            ...train,
+            // Explicitly preserve the original origin
+            fromCode: train.fromCode,
+            from: train.from,
+            // Set destination to this station
+            toCode: station.stop_id,
+            to: station.stop_name,
+            arriveTime: stationTime.time,
+            arriveDayOffset: stationTime.dayOffset,
+          }
+        : {
+            ...train,
+            // Set origin to this station
+            fromCode: station.stop_id,
+            from: station.stop_name,
+            departTime: stationTime.time,
+            departDayOffset: stationTime.dayOffset,
+            // Explicitly preserve the original destination
+            toCode: train.toCode,
+            to: train.to,
+          };
       onTrainSelect(updatedTrain);
     },
-    [station, onTrainSelect]
+    [station, onTrainSelect, filterMode]
   );
 
   return (
@@ -345,7 +402,7 @@ export default function DepartureBoardModal({
 
           <ScrollView
             style={styles.scrollContent}
-            contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }}
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: isHalfHeight ? SCREEN_HEIGHT * 0.5 : 100 }}
             showsVerticalScrollIndicator={true}
             onScroll={(e) => {
               const offsetY = e.nativeEvent.contentOffset.y;
@@ -378,6 +435,10 @@ export default function DepartureBoardModal({
                 </Text>
                 {filteredDepartures.map((train, index) => {
                   if (!train || !train.departTime) return null;
+                  // Get the correct time for this station (not the origin's departure time)
+                  const stationTime = filterMode === 'arrivals'
+                    ? { time: train.arriveTime, dayOffset: train.arriveDayOffset }
+                    : getStationDepartureTime(train, station.stop_id);
                   return (
                     <TouchableOpacity
                       key={`${train.tripId || train.id}-${index}`}
@@ -387,8 +448,8 @@ export default function DepartureBoardModal({
                     >
                       <View style={styles.departureTime}>
                         <TimeDisplay
-                          time={train.departTime}
-                          dayOffset={train.departDayOffset}
+                          time={stationTime.time}
+                          dayOffset={stationTime.dayOffset}
                           style={styles.timeText}
                           superscriptStyle={styles.timeSuperscript}
                         />
@@ -419,26 +480,12 @@ export default function DepartureBoardModal({
                           ) : null}
                         </View>
                         <View style={styles.destinationRow}>
-                          <MaterialCommunityIcons
-                            name="arrow-right"
-                            size={14}
-                            color={AppColors.secondary}
-                          />
                           <Text style={styles.destinationText}>
-                            {train.to || 'Unknown'}{train.toCode ? ` (${train.toCode})` : ''}
+                            {station.stop_id === train.fromCode || station.stop_id === train.toCode
+                              ? `${train.fromCode} → ${train.toCode}`
+                              : `${train.fromCode} → ${station.stop_id} → ${train.toCode}`}
                           </Text>
                         </View>
-                        {train.arriveTime ? (
-                          <View style={styles.arrivalRow}>
-                            <Text style={styles.arrivalText}>Arrives </Text>
-                            <TimeDisplay
-                              time={train.arriveTime}
-                              dayOffset={train.arriveDayOffset}
-                              style={styles.arrivalText}
-                              superscriptStyle={styles.arrivalSuperscript}
-                            />
-                          </View>
-                        ) : null}
                       </View>
                       <Ionicons name="chevron-forward" size={20} color={AppColors.tertiary} />
                     </TouchableOpacity>

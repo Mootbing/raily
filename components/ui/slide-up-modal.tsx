@@ -6,10 +6,9 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
-  withTiming,
+  withSpring
 } from 'react-native-reanimated';
-import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
+import { AppColors, BlurIntensity, BorderRadius, Spacing } from '../../constants/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -276,7 +275,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
     const borderOpacity = 1 - progress;
 
     return {
-      backgroundColor: `rgba(20, 20, 25, ${opacity})`,
+      // backgroundColor: `rgba(20, 20, 25, ${opacity})`,
       borderColor: `rgba(255, 255, 255, ${0.15 * borderOpacity})`,
       borderWidth: 1,
     };
@@ -323,7 +322,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
           >
             <Animated.View style={[StyleSheet.absoluteFill, animatedBorderRadius, { overflow: 'hidden' }]}>
               <BlurView
-                intensity={40}
+                intensity={BlurIntensity}
                 style={StyleSheet.absoluteFill}
               >
                 <Animated.View style={styles.content}>

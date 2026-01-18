@@ -612,7 +612,7 @@ function MapScreenInner() {
       {showTrainDetail && selectedTrain && (
         <SlideUpModal
           ref={detailModalRef}
-          minSnapPercent={0.15}
+          minSnapPercent={0.1}
           initialSnap={getInitialSnap('trainDetail')}
           onDismiss={() => handleModalDismissed('trainDetail')}
           onSnapChange={handleSnapChange}

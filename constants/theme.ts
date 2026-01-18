@@ -83,6 +83,8 @@ export const BorderRadius = {
   xl: 32,
 };
 
+export const BlurIntensity = 50;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
