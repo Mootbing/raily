@@ -1,6 +1,7 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useState, useRef } from 'react';
 import { Platform, Text, TextInput, TouchableOpacity, View, StyleSheet } from 'react-native';
+import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AppColors, BorderRadius, FontSizes, Spacing } from '../constants/theme';
 import { getTrainDisplayName } from '../services/api';
@@ -323,7 +324,8 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
             <Text style={styles.noResults}>No direct trains between these stations</Text>
           ) : (
             tripResults.map((trip) => {
-              const { displayName } = getTrainDisplayName(trip.tripId);
+              const { displayName, routeName } = getTrainDisplayName(trip.tripId);
+              const isAcela = routeName?.toLowerCase().includes('acela');
               return (
               <TouchableOpacity
                 key={trip.tripId}
@@ -331,7 +333,11 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
                 onPress={() => onSelectTrip(trip.tripId, fromStation.stop_id, toStation.stop_id, selectedDate)}
               >
                 <View style={styles.tripIcon}>
-                  <Ionicons name="train" size={20} color={AppColors.primary} />
+                  {isAcela ? (
+                    <Ionicons name="train" size={20} color={AppColors.primary} />
+                  ) : (
+                    <FontAwesome6 name="train" size={16} color={AppColors.primary} />
+                  )}
                 </View>
                 <View style={styles.tripInfo}>
                   <Text style={styles.tripName}>{displayName}</Text>

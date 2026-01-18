@@ -1,8 +1,8 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { COLORS, styles } from '../screens/styles';
 
 export interface FrequentlyUsedItemProps {
@@ -32,7 +32,7 @@ export function FrequentlyUsedList({ items, onSelect }: { items: FrequentlyUsedI
               item.name.toLowerCase().includes('acela') ? (
                 <Ionicons name="train" size={24} color={COLORS.primary} />
               ) : (
-                <MaterialIcons name="train" size={24} color={COLORS.primary} />
+                <FontAwesome6 name="train" size={20} color={COLORS.primary} />
               )
             )}
             {item.type === 'station' && (

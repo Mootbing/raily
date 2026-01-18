@@ -110,7 +110,7 @@ export function AnimatedStationMarker({
             color: AppColors.primary,
             fontSize: currentIsCluster ? 10 : 9,
             fontWeight: '600',
-            marginTop: -4,
+            marginTop: 0,
             textAlign: 'center',
           }}
           numberOfLines={1}

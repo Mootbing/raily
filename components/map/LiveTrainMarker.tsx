@@ -1,11 +1,12 @@
 /**
  * Live train marker component for map visualization
- * Displays train position with label (similar to station markers)
+ * Displays train position with label (matching station marker animation style)
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, Text } from 'react-native';
 import { Marker } from 'react-native-maps';
+import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AppColors } from '../../constants/theme';
 
@@ -24,12 +25,15 @@ interface LiveTrainMarkerProps {
 
 export function LiveTrainMarker({
   trainNumber,
+  routeName,
   coordinate,
   isSaved = false,
   isCluster = false,
   clusterCount = 0,
   onPress,
 }: LiveTrainMarkerProps) {
+  // Use Ionicons train for Acela (high-speed), FontAwesome6 train for others
+  const isAcela = routeName?.toLowerCase().includes('acela');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
@@ -37,12 +41,15 @@ export function LiveTrainMarker({
   const [currentLabel, setCurrentLabel] = useState(isCluster ? `${clusterCount}+` : trainNumber);
   const [currentIsCluster, setCurrentIsCluster] = useState(isCluster);
 
+  // Determine icon color based on state
+  const iconColor = isSaved ? AppColors.accentBlue : AppColors.primary;
+
   // Fade in on mount
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 250,
+        duration: 200,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
@@ -72,7 +79,7 @@ export function LiveTrainMarker({
             useNativeDriver: true,
           }),
         ]),
-        Animated.delay(10),
+        Animated.delay(10), // Small delay for state update
       ]).start(() => {
         setCurrentLabel(newLabel);
         setCurrentIsCluster(isCluster);
@@ -93,9 +100,6 @@ export function LiveTrainMarker({
     }
   }, [newLabel, isCluster, currentLabel, currentIsCluster, fadeAnim, scaleAnim]);
 
-  // Determine icon color based on state
-  const iconColor = isSaved ? AppColors.accentBlue : AppColors.primary;
-
   return (
     <Marker
       coordinate={coordinate}
@@ -104,27 +108,25 @@ export function LiveTrainMarker({
       tracksViewChanges={false}
     >
       <Animated.View
-        style={[
-          styles.markerContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
+        style={{
+          alignItems: 'center',
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        }}
       >
-        <View style={styles.iconWrapper}>
-          <Ionicons
-            name="train"
-            size={22}
-            color={iconColor}
-          />
-        </View>
+        {isAcela ? (
+          <Ionicons name="train" size={24} color={iconColor} />
+        ) : (
+          <FontAwesome6 name="train" size={20} color={iconColor} />
+        )}
         <Text
-          style={[
-            styles.label,
-            { color: iconColor },
-            currentIsCluster && styles.clusterLabel,
-          ]}
+          style={{
+            color: iconColor,
+            fontSize: currentIsCluster ? 10 : 9,
+            fontWeight: '600',
+            marginTop: 0,
+            textAlign: 'center',
+          }}
           numberOfLines={1}
         >
           {currentLabel}
@@ -133,30 +135,3 @@ export function LiveTrainMarker({
     </Marker>
   );
 }
-
-const styles = StyleSheet.create({
-  markerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 50,
-    height: 50,
-  },
-  iconWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: AppColors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  label: {
-    fontSize: 9,
-    fontWeight: '600',
-    marginTop: -4,
-    textAlign: 'center',
-  },
-  clusterLabel: {
-    fontSize: 10,
-  },
-});
