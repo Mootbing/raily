@@ -4,7 +4,7 @@
     "slug": "tracky",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/AppIcon.png",
     "scheme": "tracky",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

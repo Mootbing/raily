@@ -20,7 +20,7 @@ const STRIP_HEIGHT = 56;
 
 const SPRING_CONFIG = {
   damping: 28,
-  stiffness: 200,
+  stiffness: 400,
   overshootClamping: false,
 };
 

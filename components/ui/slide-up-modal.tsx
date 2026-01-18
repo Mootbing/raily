@@ -1,6 +1,6 @@
 import { BlurView } from 'expo-blur';
 import React, { createContext, useEffect, useState } from 'react';
-import { Dimensions, Platform, StatusBar, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import { Dimensions, Platform, StatusBar, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -77,13 +77,12 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
   const [isFullscreen, setIsFullscreen] = useState(initialSnap === 'max');
   const [isCollapsed, setIsCollapsed] = useState(initialSnap === 'min');
   const [gestureEnabled, setGestureEnabled] = useState(true);
-  const glowOpacity = useSharedValue(0);
 
   // Dismiss function to animate out and call onDismiss
   const dismiss = () => {
     translateY.value = withSpring(SCREEN_HEIGHT, {
       damping: 50,
-      stiffness: 280,
+      stiffness: 560,
       overshootClamping: true,
     }, (finished) => {
       if (finished && onDismiss) {
@@ -105,7 +104,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
 
     translateY.value = withSpring(targetY, {
       damping: 50,
-      stiffness: 280,
+      stiffness: 560,
       overshootClamping: false,
     });
   };
@@ -120,7 +119,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
     // Animate in on mount from bottom of screen
     translateY.value = withSpring(SCREEN_HEIGHT - getInitialHeight(), {
       damping: 50,
-      stiffness: 280,
+      stiffness: 560,
       overshootClamping: false,
     });
   }, []);
@@ -145,7 +144,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
 
     translateY.value = withSpring(targetY, {
       damping: 50,
-      stiffness: 280,
+      stiffness: 560,
       overshootClamping: false,
     });
   };
@@ -233,7 +232,7 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
 
       translateY.value = withSpring(targetY, {
         damping: 38,
-        stiffness: 400,
+        stiffness: 800,
         overshootClamping: false,
       });
     })
@@ -309,49 +308,31 @@ export default React.forwardRef<{ snapToPoint: (point: 'min' | 'half' | 'max') =
     };
   });
 
-  const animatedGlow = useAnimatedStyle(() => {
-    return {
-      shadowOpacity: 0.3 + glowOpacity.value * 0.2,
-      shadowRadius: 20 + glowOpacity.value * 10,
-    };
-  });
-
-  const handlePressIn = () => {
-    glowOpacity.value = withTiming(1, { duration: 150 });
-  };
-
-  const handlePressOut = () => {
-    glowOpacity.value = withTiming(0, { duration: 300 });
-  };
-
   return (
     <GestureDetector gesture={panGesture}>
       <Animated.View style={[styles.container, animatedStyle]}>
         <SlideUpModalContext.Provider value={{ isFullscreen, isCollapsed, scrollOffset, panGesture, modalHeight, snapToPoint, setGestureEnabled }}>
-          <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut}>
-            <Animated.View
-              style={[
-                styles.blurContainer,
-                animatedBorderRadius,
-                animatedBackground,
-                animatedMargins,
-                animatedGlow,
-                isFullscreen && styles.blurContainerFullscreen,
-              ]}
-            >
-              <Animated.View style={[StyleSheet.absoluteFill, animatedBorderRadius, { overflow: 'hidden' }]}>
-                <BlurView
-                  intensity={40}
-                  style={StyleSheet.absoluteFill}
-                >
-                  <Animated.View style={styles.content}>
-                    <View style={styles.handleContainer} />
-                    <View style={styles.childrenContainer}>{children}</View>
-                  </Animated.View>
-                </BlurView>
-              </Animated.View>
+          <Animated.View
+            style={[
+              styles.blurContainer,
+              animatedBorderRadius,
+              animatedBackground,
+              animatedMargins,
+              isFullscreen && styles.blurContainerFullscreen,
+            ]}
+          >
+            <Animated.View style={[StyleSheet.absoluteFill, animatedBorderRadius, { overflow: 'hidden' }]}>
+              <BlurView
+                intensity={40}
+                style={StyleSheet.absoluteFill}
+              >
+                <Animated.View style={styles.content}>
+                  <View style={styles.handleContainer} />
+                  <View style={styles.childrenContainer}>{children}</View>
+                </Animated.View>
+              </BlurView>
             </Animated.View>
-          </TouchableWithoutFeedback>
+          </Animated.View>
         </SlideUpModalContext.Provider>
       </Animated.View>
     </GestureDetector>

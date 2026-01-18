@@ -25,6 +25,7 @@ interface TrainDetailModalProps {
   train?: Train;
   onClose: () => void;
   onStationSelect?: (stationCode: string, lat: number, lon: number) => void;
+  onTrainSelect?: (train: Train) => void;
 }
 
 /**
@@ -118,7 +119,7 @@ function calculateDuration(startTime: string, endTime: string): string {
 
 import { Alert } from 'react-native';
 
-export default function TrainDetailModal({ train, onClose, onStationSelect }: TrainDetailModalProps) {
+export default function TrainDetailModal({ train, onClose, onStationSelect, onTrainSelect }: TrainDetailModalProps) {
   // Use context if train is not provided
   const { selectedTrain } = useTrainContext();
   const trainData = train || selectedTrain;
@@ -438,6 +439,16 @@ export default function TrainDetailModal({ train, onClose, onStationSelect }: Tr
                         {remainingDistanceMiles !== null && (
                           <Text style={[styles.durationText, { marginLeft: 0 }]}> • {remainingDistanceMiles.toFixed(0)} mi</Text>
                         )}
+                        {(() => {
+                          const finalStop = allStops[allStops.length - 1];
+                          const nights = calculateNights(nextStop?.dayOffset || 0, finalStop?.dayOffset || 0);
+                          if (nights > 0) {
+                            return (
+                              <Text style={[styles.durationText, { marginLeft: 0 }]}> • {nights} {pluralize(nights, 'night')}</Text>
+                            );
+                          }
+                          return null;
+                        })()}
                         <Text style={[styles.durationText, { marginLeft: 0 }]}> • {remainingStopsCount} {pluralize(remainingStopsCount, 'stop')} left</Text>
                       <TouchableOpacity
                         style={styles.elapsedStopsButton}
@@ -549,6 +560,15 @@ export default function TrainDetailModal({ train, onClose, onStationSelect }: Tr
                         {distanceMiles !== null && (
                           <Text style={[styles.durationText, { marginLeft: 0 }]}> • {distanceMiles.toFixed(0)} mi</Text>
                         )}
+                        {(() => {
+                          const nights = calculateNights(allStops[0]?.dayOffset || 0, allStops[allStops.length - 1]?.dayOffset || 0);
+                          if (nights > 0) {
+                            return (
+                              <Text style={[styles.durationText, { marginLeft: 0 }]}> • {nights} {pluralize(nights, 'night')}</Text>
+                            );
+                          }
+                          return null;
+                        })()}
                         <Text style={[styles.durationText, { marginLeft: 0 }]}> • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}</Text>
                         <TouchableOpacity
                           style={styles.elapsedStopsButton}
@@ -648,6 +668,15 @@ export default function TrainDetailModal({ train, onClose, onStationSelect }: Tr
                             {fullRouteDistanceMiles !== null && (
                               <Text style={[styles.durationText, { marginLeft: 0 }]}> • {fullRouteDistanceMiles.toFixed(0)} mi</Text>
                             )}
+                            {(() => {
+                              const nights = calculateNights(allStops[0]?.dayOffset || 0, allStops[allStops.length - 1]?.dayOffset || 0);
+                              if (nights > 0) {
+                                return (
+                                  <Text style={[styles.durationText, { marginLeft: 0 }]}> • {nights} {pluralize(nights, 'night')}</Text>
+                                );
+                              }
+                              return null;
+                            })()}
                             <Text style={[styles.durationText, { marginLeft: 0 }]}> • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}</Text>
                             <TouchableOpacity
                               style={styles.elapsedStopsButton}
@@ -770,10 +799,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect }: Tr
                               const nights = calculateNights(trainData.departDayOffset || 0, trainData.arriveDayOffset || 0);
                               if (nights > 0) {
                                 return (
-                                  <View style={styles.overnightBadge}>
-                                    <Ionicons name="moon" size={12} color={COLORS.secondary} />
-                                    <Text style={styles.overnightText}>{nights} {pluralize(nights, 'night')}</Text>
-                                  </View>
+                                  <Text style={[styles.durationText, { marginLeft: 0 }]}> • {nights} {pluralize(nights, 'night')}</Text>
                                 );
                               }
                               return null;
@@ -1193,18 +1219,6 @@ const styles = StyleSheet.create({
   },
   // Elapsed stop text styling (secondary color for past stops)
   elapsedText: {
-    color: COLORS.secondary,
-  },
-  // Overnight badge
-  overnightBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginLeft: 4,
-  },
-  overnightText: {
-    fontSize: 14,
-    fontFamily: FONTS.family,
     color: COLORS.secondary,
   },
 });

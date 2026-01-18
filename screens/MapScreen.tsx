@@ -11,6 +11,7 @@ import DepartureBoardModal from '../components/ui/departure-board-modal';
 import SlideUpModal from '../components/ui/slide-up-modal';
 import TrainDetailModal from '../components/ui/train-detail-modal';
 import { AppColors } from '../constants/theme';
+import { ModalProvider, useModalContext } from '../context/ModalContext';
 import { TrainProvider, useTrainContext } from '../context/TrainContext';
 import { useLiveTrains } from '../hooks/useLiveTrains';
 import { useRealtime } from '../hooks/useRealtime';
@@ -64,15 +65,26 @@ function getLatitudeOffsetForModal(
 
 function MapScreenInner() {
   const mapRef = useRef<MapView>(null);
-  const mainModalRef = useRef<any>(null);
-  const detailModalRef = useRef<any>(null);
-  const departureBoardRef = useRef<any>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showDepartureBoard, setShowDepartureBoard] = useState(false);
-  const [selectedStation, setSelectedStation] = useState<Stop | null>(null);
 
-  // Track pending station for animation sequencing (ref to avoid async state issues)
-  const pendingStationRef = useRef<Stop | null>(null);
+  // Use centralized modal context
+  const {
+    showMain,
+    showTrainDetail,
+    showDepartureBoard,
+    mainModalRef,
+    detailModalRef,
+    departureBoardRef,
+    modalData,
+    navigateToTrain,
+    navigateToStation,
+    navigateToMain,
+    goBack,
+    handleModalDismissed,
+    handleSnapChange,
+    getInitialSnap,
+    currentSnap,
+  } = useModalContext();
+
   const [region, setRegion] = useState<{
     latitude: number;
     longitude: number;
@@ -86,9 +98,6 @@ function MapScreenInner() {
   const [routeMode, setRouteMode] = useState<RouteMode>('visible');
   const [stationMode, setStationMode] = useState<StationMode>('auto');
   const [trainMode, setTrainMode] = useState<TrainMode>('all');
-  // Track current modal snap point for map centering calculations
-  // 'half' = 50% modal, 'max' = fullscreen, 'min' = collapsed, null = no modal
-  const [currentModalSnap, setCurrentModalSnap] = useState<'min' | 'half' | 'max' | null>(null);
   const { savedTrains, setSavedTrains, selectedTrain, setSelectedTrain } = useTrainContext();
   const insets = useSafeAreaInsets();
 
@@ -99,17 +108,13 @@ function MapScreenInner() {
   // Fetch all live trains from GTFS-RT (only when trainMode is 'all')
   const { liveTrains } = useLiveTrains(15000, trainMode === 'all');
 
-  // Track pending train for animation sequencing (ref to avoid async state issues)
-  const pendingTrainRef = React.useRef<Train | null>(null);
-
-  // Handle train selection: dismiss main modal first, then show detail modal
-  const handleTrainSelect = (train: Train) => {
-    pendingTrainRef.current = train;
+  // Handle train selection from list - animate map if has position, navigate to detail
+  const handleTrainSelect = useCallback((train: Train) => {
     setSelectedTrain(train);
 
-    // If train has realtime position, animate map to that location and open modal at 50%
+    // If train has realtime position, animate map to that location
+    const fromMarker = !!train.realtime?.position;
     if (train.realtime?.position) {
-      trainMarkerPressRef.current = true; // Use half modal for live trains
       const latitudeDelta = 0.05;
       const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
       mapRef.current?.animateToRegion({
@@ -119,20 +124,12 @@ function MapScreenInner() {
         longitudeDelta: 0.05,
       }, 500);
     }
-    // If no realtime position, trainMarkerPressRef stays false -> modal opens at max
 
-    // Dismiss main modal - when animation completes, show detail modal
-    mainModalRef.current?.dismiss?.();
-  };
-
-  // Track whether train marker was pressed (for half vs max modal)
-  const trainMarkerPressRef = useRef(false);
+    navigateToTrain(train, { fromMarker });
+  }, [setSelectedTrain, navigateToTrain]);
 
   // Handle train marker press on the map - center map on train and show detail at 50%
-  const handleTrainMarkerPress = (train: Train, lat: number, lon: number) => {
-    // Mark this as a marker press for half modal
-    trainMarkerPressRef.current = true;
-
+  const handleTrainMarkerPress = useCallback((train: Train, lat: number, lon: number) => {
     // Center map on train position with offset for 50% modal
     const latitudeDelta = 0.05;
     const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
@@ -143,15 +140,12 @@ function MapScreenInner() {
       longitudeDelta: 0.05,
     }, 500);
 
-    // Set the train and show modal at half
-    pendingTrainRef.current = train;
     setSelectedTrain(train);
-    // Dismiss main modal - when animation completes, show detail modal at half
-    mainModalRef.current?.dismiss?.();
-  };
+    navigateToTrain(train, { fromMarker: true });
+  }, [setSelectedTrain, navigateToTrain]);
 
   // Handle live train marker press - fetch train details then show modal
-  const handleLiveTrainMarkerPress = async (tripId: string, lat: number, lon: number) => {
+  const handleLiveTrainMarkerPress = useCallback(async (tripId: string, lat: number, lon: number) => {
     try {
       const train = await TrainAPIService.getTrainDetails(tripId);
       if (train) {
@@ -160,50 +154,10 @@ function MapScreenInner() {
     } catch (error) {
       console.error('Error fetching train details:', error);
     }
-  };
-
-  // When main modal finishes sliding out, show the detail modal or departure board
-  const handleMainModalDismissed = () => {
-    if (pendingTrainRef.current) {
-      // Check if this was a marker press (half) or list selection (max)
-      if (trainMarkerPressRef.current) {
-        setCurrentModalSnap('half'); // Train marker press opens at half
-        trainMarkerPressRef.current = false;
-      } else {
-        setCurrentModalSnap('max'); // List selection opens at max
-      }
-      setShowDetailModal(true);
-    } else if (pendingStationRef.current) {
-      setCurrentModalSnap('half'); // Departure board opens at half
-      setShowDepartureBoard(true);
-    }
-  };
-
-  // When detail modal closes, slide main modal back in
-  const handleDetailModalClose = () => {
-    detailModalRef.current?.dismiss?.();
-  };
-
-  // When detail modal finishes sliding out, slide main modal back in
-  const handleDetailModalDismissed = () => {
-    pendingTrainRef.current = null;
-    setShowDetailModal(false);
-    setSelectedTrain(null);
-    // If we came from departure board, show it again; otherwise show main modal
-    setTimeout(() => {
-      if (pendingStationRef.current) {
-        // Re-show the departure board
-        setCurrentModalSnap('half');
-        setShowDepartureBoard(true);
-      } else {
-        setCurrentModalSnap('half'); // Main modal default
-        mainModalRef.current?.slideIn?.();
-      }
-    }, 50);
-  };
+  }, [handleTrainMarkerPress]);
 
   // Handle station pin press - show departure board
-  const handleStationPress = (cluster: { id: string; lat: number; lon: number; isCluster: boolean; stations: Array<{ id: string; name: string; lat: number; lon: number }> }) => {
+  const handleStationPress = useCallback((cluster: { id: string; lat: number; lon: number; isCluster: boolean; stations: Array<{ id: string; name: string; lat: number; lon: number }> }) => {
     // If it's a cluster, just zoom in
     if (cluster.isCluster) {
       mapRef.current?.animateToRegion({
@@ -224,45 +178,52 @@ function MapScreenInner() {
       stop_lon: stationData.lon,
     };
 
-    // Store in ref to avoid race condition with state updates
-    pendingStationRef.current = stop;
-    setSelectedStation(stop);
-    // Dismiss main modal first, then show departure board
-    mainModalRef.current?.dismiss?.();
-  };
+    navigateToStation(stop);
+  }, [navigateToStation]);
 
   // Handle train selection from departure board
-  const handleDepartureBoardTrainSelect = (train: Train) => {
-    pendingTrainRef.current = train;
+  const handleDepartureBoardTrainSelect = useCallback((train: Train) => {
     setSelectedTrain(train);
-    // Dismiss departure board modal, then show detail modal
-    departureBoardRef.current?.dismiss?.();
-  };
-
-  // When departure board dismisses after selecting a train
-  const handleDepartureBoardDismissed = () => {
-    if (pendingTrainRef.current) {
-      setCurrentModalSnap('max'); // Detail modal opens at max
-      setShowDepartureBoard(false);
-      setShowDetailModal(true);
-    } else {
-      // User closed departure board without selecting a train
-      setShowDepartureBoard(false);
-      setSelectedStation(null);
-      pendingStationRef.current = null;
-      setTimeout(() => {
-        setCurrentModalSnap('half'); // Main modal default
-        mainModalRef.current?.slideIn?.();
-      }, 50);
-    }
-  };
+    navigateToTrain(train, { fromMarker: false, returnTo: 'departureBoard' });
+  }, [setSelectedTrain, navigateToTrain]);
 
   // Handle close button on departure board
-  const handleDepartureBoardClose = () => {
-    pendingTrainRef.current = null;
-    pendingStationRef.current = null;
-    departureBoardRef.current?.dismiss?.();
-  };
+  const handleDepartureBoardClose = useCallback(() => {
+    navigateToMain();
+  }, [navigateToMain]);
+
+  // Handle detail modal close
+  const handleDetailModalClose = useCallback(() => {
+    goBack();
+  }, [goBack]);
+
+  // Handle train-to-train navigation from detail modal
+  const handleTrainToTrainNavigation = useCallback((train: Train) => {
+    setSelectedTrain(train);
+    navigateToTrain(train, { fromMarker: false });
+  }, [setSelectedTrain, navigateToTrain]);
+
+  // Handle station selection from train detail - navigate to departure board
+  const handleStationSelectFromDetail = useCallback((stationCode: string, lat: number, lon: number) => {
+    // Animate map to station with offset for 50% modal
+    const latitudeDelta = 0.02;
+    const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
+    mapRef.current?.animateToRegion({
+      latitude: lat - latitudeOffset,
+      longitude: lon,
+      latitudeDelta: latitudeDelta,
+      longitudeDelta: 0.02,
+    }, 500);
+
+    // Create a Stop object and navigate
+    const stop: Stop = {
+      stop_id: stationCode,
+      stop_name: gtfsParser.getStopName(stationCode),
+      stop_lat: lat,
+      stop_lon: lon,
+    };
+    navigateToStation(stop);
+  }, [navigateToStation]);
 
   // Get user location on mount
   React.useEffect(() => {
@@ -330,17 +291,40 @@ function MapScreenInner() {
 
   useRealtime(savedTrains, setSavedTrains, 20000);
 
-  // Handle region changes with debounced viewport bounds updates
-  const handleRegionChangeComplete = useCallback((newRegion: any) => {
-    setRegion(newRegion);
+  // Handle region changes with throttled region updates and debounced viewport bounds
+  const lastRegionUpdateRef = useRef<number>(0);
+  const pendingRegionRef = useRef<any>(null);
+  const regionThrottleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Debounce viewport bounds updates to prevent excessive re-renders
+  const handleRegionChangeComplete = useCallback((newRegion: any) => {
+    const now = Date.now();
+    const THROTTLE_MS = 100; // Throttle region state updates
+
+    // Store pending region for deferred update
+    pendingRegionRef.current = newRegion;
+
+    // Throttle setRegion calls to reduce re-renders during fast movement
+    if (now - lastRegionUpdateRef.current >= THROTTLE_MS) {
+      lastRegionUpdateRef.current = now;
+      setRegion(newRegion);
+    } else if (!regionThrottleTimerRef.current) {
+      // Schedule a deferred update to catch the final position
+      regionThrottleTimerRef.current = setTimeout(() => {
+        regionThrottleTimerRef.current = null;
+        if (pendingRegionRef.current) {
+          lastRegionUpdateRef.current = Date.now();
+          setRegion(pendingRegionRef.current);
+        }
+      }, THROTTLE_MS);
+    }
+
+    // Debounce viewport bounds updates (for lazy loading) with longer delay
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     debounceTimerRef.current = setTimeout(() => {
       setViewportBounds(regionToViewportBounds(newRegion));
-    }, 150); // 150ms debounce for smooth panning
+    }, 250); // 250ms debounce for viewport bounds
   }, []);
 
   // Initialize viewport bounds when region is first set
@@ -350,11 +334,14 @@ function MapScreenInner() {
     }
   }, [region, viewportBounds]);
 
-  // Cleanup debounce timer on unmount
+  // Cleanup timers on unmount
   React.useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+      }
+      if (regionThrottleTimerRef.current) {
+        clearTimeout(regionThrottleTimerRef.current);
       }
     };
   }, []);
@@ -367,7 +354,7 @@ function MapScreenInner() {
       }
       const location = await Location.getCurrentPositionAsync({});
       const latitudeDelta = 0.05;
-      const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, currentModalSnap);
+      const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, currentSnap);
       mapRef.current?.animateToRegion({
         latitude: location.coords.latitude - latitudeOffset,
         longitude: location.coords.longitude,
@@ -383,6 +370,23 @@ function MapScreenInner() {
   const baseStrokeWidth = useMemo(() => {
     return getStrokeWidthForZoom(region?.latitudeDelta ?? 0.0922);
   }, [region?.latitudeDelta]);
+
+  // Calculate route opacity based on zoom level - fade out when zoomed out
+  // latitudeDelta: smaller = zoomed in, larger = zoomed out
+  const routeOpacity = useMemo(() => {
+    const delta = region?.latitudeDelta ?? 0.0922;
+    const fadeStartDelta = 0.5;  // Start fading at this zoom level
+    const fadeEndDelta = 1.5;    // Fully hidden at this zoom level
+
+    if (delta <= fadeStartDelta) return 1;
+    if (delta >= fadeEndDelta) return 0;
+
+    // Linear interpolation between fade start and end
+    return 1 - (delta - fadeStartDelta) / (fadeEndDelta - fadeStartDelta);
+  }, [region?.latitudeDelta]);
+
+  // Don't render routes at all when fully faded out (memory optimization)
+  const shouldRenderRoutes = routeMode !== 'hidden' && routeOpacity > 0;
 
   // Cluster stations based on zoom level and station mode
   const stationClusters = useMemo(() => {
@@ -424,7 +428,7 @@ function MapScreenInner() {
         provider={PROVIDER_DEFAULT}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {routeMode !== 'hidden' && visibleShapes.map((shape) => {
+        {shouldRenderRoutes && visibleShapes.map((shape) => {
           const colorScheme = getRouteColor(shape.id);
           return (
             <AnimatedRoute
@@ -433,6 +437,7 @@ function MapScreenInner() {
               coordinates={shape.coordinates}
               strokeColor={colorScheme.stroke}
               strokeWidth={Math.max(2, baseStrokeWidth)}
+              zoomOpacity={routeOpacity}
             />
           );
         })}
@@ -588,73 +593,64 @@ function MapScreenInner() {
         onRecenter={handleRecenter}
       />
 
-      {/* Main modal - My Trains list (always rendered, slides in/out) */}
-      <SlideUpModal
-        ref={mainModalRef}
-        minSnapPercent={0.35}
-        onDismiss={handleMainModalDismissed}
-        onSnapChange={(snap) => setCurrentModalSnap(snap)}
-      >
-        <ModalContent
-          onTrainSelect={(trainOrStation) => {
-            // If it's a train, animate out main modal then show details
-            if (trainOrStation && trainOrStation.departTime) {
-              handleTrainSelect(trainOrStation);
-            } else if (trainOrStation && trainOrStation.lat && trainOrStation.lon) {
-              // If it's a station, center map and collapse modal to 25%
-              mapRef.current?.animateToRegion({
-                latitude: trainOrStation.lat,
-                longitude: trainOrStation.lon,
-                latitudeDelta: 0.05,
-                longitudeDelta: 0.05,
-              }, 500);
-              mainModalRef.current?.snapToPoint?.('min');
-            }
-          }}
-        />
-      </SlideUpModal>
-
-      {/* Detail modal - Train details */}
-      {showDetailModal && selectedTrain && (
+      {/* Main modal - My Trains list (conditionally rendered, slides in/out) */}
+      {showMain && (
         <SlideUpModal
-          ref={detailModalRef}
-          minSnapPercent={0.15}
-          initialSnap={currentModalSnap === 'half' ? 'half' : 'max'}
-          onDismiss={handleDetailModalDismissed}
-          onSnapChange={(snap) => setCurrentModalSnap(snap)}
+          ref={mainModalRef}
+          minSnapPercent={0.35}
+          initialSnap={savedTrains.length === 0 ? 'min' : 'half'}
+          onDismiss={() => handleModalDismissed('main')}
+          onSnapChange={handleSnapChange}
         >
-          <TrainDetailModal
-            train={selectedTrain}
-            onClose={handleDetailModalClose}
-            onStationSelect={(stationCode, lat, lon) => {
-              // Animate map to station with offset for 50% modal
-              const latitudeDelta = 0.02;
-              const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
-              mapRef.current?.animateToRegion({
-                latitude: lat - latitudeOffset,
-                longitude: lon,
-                latitudeDelta: latitudeDelta,
-                longitudeDelta: 0.02,
-              }, 500);
-              // Snap modal to 50%
-              setCurrentModalSnap('half');
-              detailModalRef.current?.snapToPoint?.('half');
+          <ModalContent
+            onTrainSelect={(trainOrStation) => {
+              // If it's a train, animate out main modal then show details
+              if (trainOrStation && trainOrStation.departTime) {
+                handleTrainSelect(trainOrStation as Train);
+              } else if (trainOrStation && (trainOrStation as any).lat && (trainOrStation as any).lon) {
+                // If it's a station, center map and collapse modal to 25%
+                mapRef.current?.animateToRegion({
+                  latitude: (trainOrStation as any).lat,
+                  longitude: (trainOrStation as any).lon,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
+                }, 500);
+                mainModalRef.current?.snapToPoint?.('min');
+              }
             }}
           />
         </SlideUpModal>
       )}
 
+      {/* Detail modal - Train details */}
+      {showTrainDetail && selectedTrain && (
+        <SlideUpModal
+          ref={detailModalRef}
+          minSnapPercent={0.15}
+          initialSnap={getInitialSnap('trainDetail')}
+          onDismiss={() => handleModalDismissed('trainDetail')}
+          onSnapChange={handleSnapChange}
+        >
+          <TrainDetailModal
+            train={selectedTrain}
+            onClose={handleDetailModalClose}
+            onStationSelect={handleStationSelectFromDetail}
+            onTrainSelect={handleTrainToTrainNavigation}
+          />
+        </SlideUpModal>
+      )}
+
       {/* Departure board modal - Station departures */}
-      {showDepartureBoard && selectedStation && (
+      {showDepartureBoard && modalData.station && (
         <SlideUpModal
           ref={departureBoardRef}
           minSnapPercent={0.1}
-          initialSnap="half"
-          onDismiss={handleDepartureBoardDismissed}
-          onSnapChange={(snap) => setCurrentModalSnap(snap)}
+          initialSnap={getInitialSnap('departureBoard')}
+          onDismiss={() => handleModalDismissed('departureBoard')}
+          onSnapChange={handleSnapChange}
         >
           <DepartureBoardModal
-            station={selectedStation}
+            station={modalData.station}
             onClose={handleDepartureBoardClose}
             onTrainSelect={handleDepartureBoardTrainSelect}
           />
@@ -667,7 +663,9 @@ function MapScreenInner() {
 export default function MapScreen() {
   return (
     <TrainProvider>
-      <MapScreenInner />
+      <ModalProvider>
+        <MapScreenInner />
+      </ModalProvider>
     </TrainProvider>
   );
 }

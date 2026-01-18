@@ -12,6 +12,7 @@ interface AnimatedRouteProps {
   coordinates: Coordinate[];
   strokeColor: string;
   strokeWidth: number;
+  zoomOpacity?: number; // Additional opacity modifier based on zoom level (0-1)
 }
 
 // Parse color string to extract RGB components
@@ -58,6 +59,7 @@ export function AnimatedRoute({
   coordinates,
   strokeColor,
   strokeWidth,
+  zoomOpacity = 1,
 }: AnimatedRouteProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [opacity, setOpacity] = useState(0);
@@ -85,9 +87,10 @@ export function AnimatedRoute({
     };
   }, [fadeAnim]);
 
-  // Compute animated stroke color with opacity
+  // Compute animated stroke color with opacity (apply both fade-in and zoom opacity)
   const { r, g, b, a } = baseColor.current;
-  const animatedColor = `rgba(${r}, ${g}, ${b}, ${a * opacity})`;
+  const finalOpacity = a * opacity * zoomOpacity;
+  const animatedColor = `rgba(${r}, ${g}, ${b}, ${finalOpacity})`;
 
   return (
     <Polyline

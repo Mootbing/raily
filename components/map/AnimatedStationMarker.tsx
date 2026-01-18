@@ -42,6 +42,7 @@ export function AnimatedStationMarker({
       coordinate={{ latitude: cluster.lat, longitude: cluster.lon }}
       anchor={{ x: 0.5, y: 0.5 }}
       onPress={onPress}
+      tracksViewChanges={false}
     >
       <Animated.View style={{ alignItems: 'center', opacity: fadeAnim }}>
         <Ionicons
