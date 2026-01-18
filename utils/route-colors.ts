@@ -3,7 +3,6 @@
  * Provides color coding based on route type and characteristics
  */
 
-import { AppColors } from '../constants/theme';
 
 export interface RouteColorScheme {
   stroke: string;
@@ -20,7 +19,7 @@ export function getRouteColor(shapeId: string): RouteColorScheme {
   return {
     stroke: '#FFFFFF',
     strokeWidth: 2,
-    opacity: 0.25,
+    opacity: 1,
   };
 }
 

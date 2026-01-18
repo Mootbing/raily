@@ -115,9 +115,27 @@ export function LiveTrainMarker({
         }}
       >
         {isAcela ? (
-          <Ionicons name="train" size={24} color={iconColor} />
+          <Ionicons
+            name="train"
+            size={24}
+            color={iconColor}
+            style={{
+              textShadowColor: 'rgba(0, 0, 0, 0.75)',
+              textShadowOffset: { width: 0, height: 1 },
+              textShadowRadius: 3,
+            }}
+          />
         ) : (
-          <FontAwesome6 name="train" size={20} color={iconColor} />
+          <FontAwesome6
+            name="train"
+            size={20}
+            color={iconColor}
+            style={{
+              textShadowColor: 'rgba(0, 0, 0, 0.75)',
+              textShadowOffset: { width: 0, height: 1 },
+              textShadowRadius: 3,
+            }}
+          />
         )}
         <Text
           style={{
@@ -126,6 +144,9 @@ export function LiveTrainMarker({
             fontWeight: '600',
             marginTop: 0,
             textAlign: 'center',
+            textShadowColor: 'rgba(0, 0, 0, 0.75)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 3,
           }}
           numberOfLines={1}
         >

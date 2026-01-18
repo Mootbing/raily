@@ -106,7 +106,15 @@ export default function DepartureBoardModal({
           const bMinutes = parseTimeToMinutes(b.departTime);
           return aMinutes - bMinutes;
         });
-        setDepartures(trains);
+        // Deduplicate by train number + departure time (same train on different days has different tripIds)
+        const seen = new Set<string>();
+        const deduped = trains.filter(train => {
+          const key = `${train.trainNumber}-${train.departTime}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setDepartures(deduped);
       } catch (error) {
         console.error('Error fetching departures:', error);
         setDepartures([]);

@@ -104,6 +104,11 @@ export function AnimatedStationMarker({
           name="location"
           size={24}
           color={AppColors.primary}
+          style={{
+            textShadowColor: 'rgba(0, 0, 0, 0.75)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 3,
+          }}
         />
         <Text
           style={{
@@ -112,6 +117,9 @@ export function AnimatedStationMarker({
             fontWeight: '600',
             marginTop: 0,
             textAlign: 'center',
+            textShadowColor: 'rgba(0, 0, 0, 0.75)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 3,
           }}
           numberOfLines={1}
         >

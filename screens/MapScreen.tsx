@@ -423,6 +423,7 @@ function MapScreenInner() {
               coordinates={shape.coordinates}
               strokeColor={colorScheme.stroke}
               strokeWidth={Math.max(2, baseStrokeWidth)}
+              zoomOpacity={colorScheme.opacity}
             />
           );
         })}

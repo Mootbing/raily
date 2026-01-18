@@ -404,7 +404,16 @@ export class GTFSParser {
     // Sort by departure time
     results.sort((a, b) => a.fromStop.departure_time.localeCompare(b.fromStop.departure_time));
 
-    return results;
+    // Deduplicate by train number + departure time (same train on different days has different trip_ids)
+    const seen = new Set<string>();
+    return results.filter(result => {
+      const trip = this.trips.get(result.tripId);
+      const trainNumber = trip?.trip_short_name || result.tripId;
+      const key = `${trainNumber}-${result.fromStop.departure_time}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 }
 
