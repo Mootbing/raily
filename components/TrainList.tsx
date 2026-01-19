@@ -64,11 +64,10 @@ interface SwipeableTrainCardProps {
   onPress: () => void;
   onDelete: () => void;
   isFirst?: boolean;
-  isRest?: boolean;
   contentOpacity?: SharedValue<number>;
 }
 
-function SwipeableTrainCard({ train, onPress, onDelete, isFirst, isRest, contentOpacity }: SwipeableTrainCardProps) {
+function SwipeableTrainCard({ train, onPress, onDelete, isFirst, contentOpacity }: SwipeableTrainCardProps) {
   const translateX = useSharedValue(0);
   const hasTriggeredSecondHaptic = useSharedValue(false);
   const isDeleting = useSharedValue(false);
@@ -215,7 +214,7 @@ function SwipeableTrainCard({ train, onPress, onDelete, isFirst, isRest, content
 
   // Animated opacity for rest of the list (not the first item) - fades out as modal collapses
   const restItemOpacityStyle = useAnimatedStyle(() => {
-    if (!isRest || !contentOpacity) {
+    if (isFirst || !contentOpacity) {
       return {};
     }
     return {
@@ -324,7 +323,6 @@ export function TrainList({ flights, onTrainSelect, onDeleteTrain }: TrainListPr
           onPress={() => onTrainSelect(flight)}
           onDelete={() => onDeleteTrain?.(flight)}
           isFirst={index === 0}
-          isRest={index > 0}
           contentOpacity={contentOpacity}
         />
       ))}
