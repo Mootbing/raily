@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.expo/
+.expo-shared/
+
+# Cache
+*.log
+.cache/
+
+# Coverage
+coverage/
+
+# OS
+.DS_Store
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+
+# Android
+android/
+ios/
+
+# Assets
+assets/
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.gif
+
+# Generated
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

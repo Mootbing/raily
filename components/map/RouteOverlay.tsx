@@ -39,7 +39,7 @@ function latLngToPoint(
 ): { x: number; y: number } {
   // Calculate normalized position within viewport
   const xNorm = (latLng.longitude - (viewport.longitude - viewport.longitudeDelta / 2)) / viewport.longitudeDelta;
-  const yNorm = ((viewport.latitude + viewport.latitudeDelta / 2) - latLng.latitude) / viewport.latitudeDelta;
+  const yNorm = (viewport.latitude + viewport.latitudeDelta / 2 - latLng.latitude) / viewport.latitudeDelta;
 
   return {
     x: xNorm * width,
@@ -96,8 +96,7 @@ function perpendicularDistance(
   if (dx === 0 && dy === 0) {
     // Line segment is a point
     return Math.sqrt(
-      Math.pow(point.longitude - lineStart.longitude, 2) +
-      Math.pow(point.latitude - lineStart.latitude, 2)
+      Math.pow(point.longitude - lineStart.longitude, 2) + Math.pow(point.latitude - lineStart.latitude, 2)
     );
   }
 

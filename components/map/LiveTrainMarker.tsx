@@ -101,12 +101,7 @@ export function LiveTrainMarker({
   }, [newLabel, isCluster, currentLabel, currentIsCluster, fadeAnim, scaleAnim]);
 
   return (
-    <Marker
-      coordinate={coordinate}
-      onPress={onPress}
-      anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={false}
-    >
+    <Marker coordinate={coordinate} onPress={onPress} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
       <Animated.View
         style={{
           alignItems: 'center',

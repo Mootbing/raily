@@ -12,40 +12,9 @@ const STORAGE_KEYS = {
   USER_PREFERENCES: 'userPreferences',
 } as const;
 
-/**
- * Format 24-hour time to 12-hour AM/PM format
- */
-function formatTime(time24: string): string {
-  const [hours, minutes] = time24.substring(0, 5).split(':');
-  let h = parseInt(hours);
-  const m = minutes;
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  if (h > 12) h -= 12;
-  if (h === 0) h = 12;
-  return `${h}:${m} ${ampm}`;
-}
-
-/**
- * Format date for display (e.g., "Jan 4")
- */
-function formatDateForDisplay(timestamp: number): string {
-  const date = new Date(timestamp);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[date.getMonth()]} ${date.getDate()}`;
-}
-
-/**
- * Calculate days away from a travel date
- */
-function calculateDaysAway(travelDate: number): number {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const travel = new Date(travelDate);
-  travel.setHours(0, 0, 0, 0);
-  const diffTime = travel.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
-}
+import { formatTime } from '../utils/time-formatting';
+import { formatDateForDisplay, calculateDaysAway } from '../utils/date-helpers';
+import { logger } from '../utils/logger';
 
 export class TrainStorageService {
   /**
@@ -56,7 +25,7 @@ export class TrainStorageService {
       const data = await AsyncStorage.getItem(STORAGE_KEYS.SAVED_TRAINS);
       return data ? JSON.parse(data) : [];
     } catch (error) {
-      console.error('Error loading saved train refs:', error);
+      logger.error('Error loading saved train refs:', error);
       return [];
     }
   }
@@ -122,7 +91,7 @@ export class TrainStorageService {
 
       return trains;
     } catch (error) {
-      console.error('Error loading saved trains:', error);
+      logger.error('Error loading saved trains:', error);
       return [];
     }
   }
@@ -135,11 +104,12 @@ export class TrainStorageService {
       const refs = await this.getSavedTrainRefs();
 
       // Check if train already exists (same tripId, segment, and travel date)
-      const exists = refs.some(r =>
-        r.tripId === ref.tripId &&
-        r.fromCode === ref.fromCode &&
-        r.toCode === ref.toCode &&
-        r.travelDate === ref.travelDate
+      const exists = refs.some(
+        r =>
+          r.tripId === ref.tripId &&
+          r.fromCode === ref.fromCode &&
+          r.toCode === ref.toCode &&
+          r.travelDate === ref.travelDate
       );
       if (exists) {
         return false;
@@ -149,7 +119,7 @@ export class TrainStorageService {
       await AsyncStorage.setItem(STORAGE_KEYS.SAVED_TRAINS, JSON.stringify(updatedRefs));
       return true;
     } catch (error) {
-      console.error('Error saving train ref:', error);
+      logger.error('Error saving train ref:', error);
       return false;
     }
   }
@@ -159,7 +129,7 @@ export class TrainStorageService {
    */
   static async saveTrain(train: Train): Promise<boolean> {
     if (!train.tripId) {
-      console.error('Cannot save train without tripId');
+      logger.error('Cannot save train without tripId');
       return false;
     }
 
@@ -190,7 +160,7 @@ export class TrainStorageService {
       await AsyncStorage.setItem(STORAGE_KEYS.SAVED_TRAINS, JSON.stringify(updatedRefs));
       return true;
     } catch (error) {
-      console.error('Error deleting train:', error);
+      logger.error('Error deleting train:', error);
       return false;
     }
   }
@@ -210,7 +180,7 @@ export class TrainStorageService {
       await AsyncStorage.removeItem(STORAGE_KEYS.SAVED_TRAINS);
       return true;
     } catch (error) {
-      console.error('Error clearing trains:', error);
+      logger.error('Error clearing trains:', error);
       return false;
     }
   }

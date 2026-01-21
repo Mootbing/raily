@@ -15,9 +15,7 @@ export function useRealtime(trains: Train[], setTrains: (t: Train[]) => void, in
 
     const refresh = async () => {
       if (trainsRef.current.length === 0) return;
-      const updated = await Promise.all(
-        trainsRef.current.map(t => TrainAPIService.refreshRealtimeData(t))
-      );
+      const updated = await Promise.all(trainsRef.current.map(t => TrainAPIService.refreshRealtimeData(t)));
       if (mounted) setTrainsRef.current(updated);
     };
 

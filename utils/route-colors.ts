@@ -3,7 +3,6 @@
  * Provides color coding based on route type and characteristics
  */
 
-
 export interface RouteColorScheme {
   stroke: string;
   strokeWidth: number;

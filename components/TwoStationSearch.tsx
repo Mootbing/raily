@@ -20,28 +20,11 @@ interface TwoStationSearchProps {
   onClose: () => void;
 }
 
-/**
- * Format 24-hour time to 12-hour AM/PM format
- */
-function formatTime(time24: string): string {
-  const [hours, minutes] = time24.substring(0, 5).split(':');
-  let h = parseInt(hours);
-  // Handle times > 24:00 (next day)
-  if (h >= 24) h -= 24;
-  const m = minutes;
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  if (h > 12) h -= 12;
-  if (h === 0) h = 12;
-  return `${h}:${m} ${ampm}`;
-}
+import { formatTime } from '../utils/time-formatting';
+import { formatDateForDisplay } from '../utils/date-helpers';
 
-/**
- * Format date for display in pill (e.g., "Jan 4")
- */
-function formatDateForPill(date: Date): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[date.getMonth()]} ${date.getDate()}`;
-}
+// Use imported utilities
+const formatDateForPill = formatDateForDisplay;
 
 export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProps) {
   const [fromStation, setFromStation] = useState<Stop | null>(null);
@@ -182,7 +165,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
             ) : stationResults.length === 0 ? (
               <Text style={styles.noResults}>No stations found</Text>
             ) : (
-              stationResults.map((station) => (
+              stationResults.map(station => (
                 <TouchableOpacity
                   key={station.stop_id}
                   style={styles.stationItem}
@@ -265,7 +248,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
           ) : stationResults.length === 0 ? (
             <Text style={styles.noResults}>No stations found</Text>
           ) : (
-            stationResults.map((station) => (
+            stationResults.map(station => (
               <TouchableOpacity
                 key={station.stop_id}
                 style={styles.stationItem}
@@ -323,41 +306,37 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
           {tripResults.length === 0 ? (
             <Text style={styles.noResults}>No direct trains between these stations</Text>
           ) : (
-            tripResults.map((trip) => {
+            tripResults.map(trip => {
               const { displayName, routeName } = getTrainDisplayName(trip.tripId);
               const isAcela = routeName?.toLowerCase().includes('acela');
               return (
-              <TouchableOpacity
-                key={trip.tripId}
-                style={styles.tripItem}
-                onPress={() => onSelectTrip(trip.tripId, fromStation.stop_id, toStation.stop_id, selectedDate)}
-              >
-                <View style={styles.tripIcon}>
-                  {isAcela ? (
-                    <Ionicons name="train" size={20} color={AppColors.primary} />
-                  ) : (
-                    <FontAwesome6 name="train" size={16} color={AppColors.primary} />
-                  )}
-                </View>
-                <View style={styles.tripInfo}>
-                  <Text style={styles.tripName}>{displayName}</Text>
-                  <View style={styles.tripTimes}>
-                    <Text style={styles.tripTime}>
-                      {formatTime(trip.fromStop.departure_time)}
-                    </Text>
-                    <Ionicons name="arrow-forward" size={12} color={AppColors.secondary} />
-                    <Text style={styles.tripTime}>
-                      {formatTime(trip.toStop.arrival_time)}
-                    </Text>
+                <TouchableOpacity
+                  key={trip.tripId}
+                  style={styles.tripItem}
+                  onPress={() => onSelectTrip(trip.tripId, fromStation.stop_id, toStation.stop_id, selectedDate)}
+                >
+                  <View style={styles.tripIcon}>
+                    {isAcela ? (
+                      <Ionicons name="train" size={20} color={AppColors.primary} />
+                    ) : (
+                      <FontAwesome6 name="train" size={16} color={AppColors.primary} />
+                    )}
                   </View>
-                  {trip.intermediateStops.length > 0 && (
-                    <Text style={styles.tripStops}>
-                      {trip.intermediateStops.length} stop{trip.intermediateStops.length !== 1 ? 's' : ''}
-                    </Text>
-                  )}
-                </View>
-                <Ionicons name="add" size={24} color={AppColors.primary} />
-              </TouchableOpacity>
+                  <View style={styles.tripInfo}>
+                    <Text style={styles.tripName}>{displayName}</Text>
+                    <View style={styles.tripTimes}>
+                      <Text style={styles.tripTime}>{formatTime(trip.fromStop.departure_time)}</Text>
+                      <Ionicons name="arrow-forward" size={12} color={AppColors.secondary} />
+                      <Text style={styles.tripTime}>{formatTime(trip.toStop.arrival_time)}</Text>
+                    </View>
+                    {trip.intermediateStops.length > 0 && (
+                      <Text style={styles.tripStops}>
+                        {trip.intermediateStops.length} stop{trip.intermediateStops.length !== 1 ? 's' : ''}
+                      </Text>
+                    )}
+                  </View>
+                  <Ionicons name="add" size={24} color={AppColors.primary} />
+                </TouchableOpacity>
               );
             })
           )}
@@ -368,9 +347,7 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
       {!showingStationSearch && !showingResults && !showingDatePicker && searchQuery.length === 0 && !toStation && (
         <View style={styles.hintContainer}>
           <Ionicons name="information-circle-outline" size={20} color={AppColors.secondary} />
-          <Text style={styles.hintText}>
-            Now enter your arrival station
-          </Text>
+          <Text style={styles.hintText}>Now enter your arrival station</Text>
         </View>
       )}
     </View>

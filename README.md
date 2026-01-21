@@ -5,6 +5,7 @@ A real-time Amtrak train tracking app built with React Native and Expo. Track tr
 ## Features
 
 ### Interactive Map
+
 - Full-screen map interface with train and station markers
 - Real-time train positions updated every 15 seconds
 - Color-coded route polylines for each train
@@ -13,12 +14,14 @@ A real-time Amtrak train tracking app built with React Native and Expo. Track tr
 - GPS-based user location with recenter button
 
 ### Live Train Tracking
+
 - Real-time positions from Transitdocs GTFS-RT feed
 - Train bearing, speed, and delay information
 - Named train routes (Acela, Southwest Chief, Coast Starlight, etc.)
 - Automatic refresh every 15 seconds with 15-second cache
 
 ### Saved Trains
+
 - Save favorite trains for quick access
 - Support for partial trip segments (e.g., Boston to NYC only)
 - Persistent storage across app sessions
@@ -26,6 +29,7 @@ A real-time Amtrak train tracking app built with React Native and Expo. Track tr
 - Swipe-to-delete with haptic feedback
 
 ### Train Details
+
 - Complete trip information with departure/arrival times
 - Multi-day journey support with day offset indicators
 - Intermediate stops with arrival times
@@ -33,6 +37,7 @@ A real-time Amtrak train tracking app built with React Native and Expo. Track tr
 - Tap stations to view their departure boards
 
 ### Station Departure Boards
+
 - View all arrivals and departures for any station
 - Filter by arrivals, departures, or all
 - Date picker for future schedules
@@ -40,13 +45,16 @@ A real-time Amtrak train tracking app built with React Native and Expo. Track tr
 - Tap trains to view full details
 
 ### Search
+
 - Search trains by number or route name
 - Search stations by name or code
 - Two-station trip search with date selection
 - Real-time autocomplete results
 
 ### Map Settings
+
 Quick-access settings panel with:
+
 - **Route Mode**: Show/hide train route lines
 - **Station Mode**: Off, Compact (clustered), or All stations
 - **Train Mode**: Off, Saved trains only, or All trains
@@ -102,14 +110,14 @@ tracky/
 
 ### Services
 
-| Service | Purpose |
-|---------|---------|
-| `realtime.ts` | GTFS-RT feed parsing and caching |
-| `api.ts` | High-level train data API |
-| `gtfs-sync.ts` | Weekly GTFS schedule sync |
-| `storage.ts` | AsyncStorage persistence |
-| `shape-loader.ts` | Viewport-based route loading |
-| `station-loader.ts` | Viewport-based station loading |
+| Service             | Purpose                          |
+| ------------------- | -------------------------------- |
+| `realtime.ts`       | GTFS-RT feed parsing and caching |
+| `api.ts`            | High-level train data API        |
+| `gtfs-sync.ts`      | Weekly GTFS schedule sync        |
+| `storage.ts`        | AsyncStorage persistence         |
+| `shape-loader.ts`   | Viewport-based route loading     |
+| `station-loader.ts` | Viewport-based station loading   |
 
 ### State Management
 
@@ -133,6 +141,7 @@ Transitdocs GTFS-RT Feed
 ### GTFS Data Sync
 
 On app startup:
+
 1. Checks if cached GTFS data exists and is fresh (< 7 days old)
 2. If stale, fetches `GTFS.zip` from Amtrak
 3. Parses `routes.txt`, `stops.txt`, `stop_times.txt`, and `shapes.txt`

@@ -4,7 +4,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, Spacing } from '../../constants/theme';
-import { formatTimeWithDayOffset } from '../../services/api';
+import { formatTimeWithDayOffset, addDelayToTime, timeToMinutes } from '../../utils/time-formatting';
 
 import { useTrainContext } from '../../context/TrainContext';
 import type { Train } from '../../types/train';
@@ -13,6 +13,7 @@ import { gtfsParser } from '../../utils/gtfs-parser';
 import { getCountdownForTrain } from '../TrainList';
 import { SlideUpModalContext } from './slide-up-modal';
 import TimeDisplay from './TimeDisplay';
+import { logger } from '../../utils/logger';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -21,7 +22,6 @@ const FONTS = {
   family: 'System',
 };
 
-
 interface TrainDetailModalProps {
   train?: Train;
   onClose: () => void;
@@ -29,44 +29,8 @@ interface TrainDetailModalProps {
   onTrainSelect?: (train: Train) => void;
 }
 
-/**
- * Format 24-hour GTFS time to 12-hour AM/PM format with day offset
- * Handles times like "13:12:00" -> { time: "1:12 PM", dayOffset: 0 }
- * Handles times like "25:30:00" -> { time: "1:30 AM", dayOffset: 1 }
- */
-function formatTime24to12(time24: string): { time: string; dayOffset: number } {
-  return formatTimeWithDayOffset(time24);
-}
-
-/**
- * Add delay minutes to a time string and return the new time
- * @param timeStr - Time in "h:mm AM/PM" format
- * @param delayMinutes - Number of minutes to add
- * @param baseDayOffset - The original day offset
- * @returns New time string and updated day offset
- */
-function addDelayToTime(timeStr: string, delayMinutes: number, baseDayOffset: number = 0): { time: string; dayOffset: number } {
-  const minutes = timeToMinutes(timeStr);
-  let newMinutes = minutes + delayMinutes;
-  let dayOffset = baseDayOffset;
-
-  // Handle day rollover
-  while (newMinutes >= 24 * 60) {
-    newMinutes -= 24 * 60;
-    dayOffset += 1;
-  }
-
-  const hours = Math.floor(newMinutes / 60);
-  const mins = newMinutes % 60;
-  const isPM = hours >= 12;
-  let displayHours = hours % 12;
-  if (displayHours === 0) displayHours = 12;
-
-  return {
-    time: `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'PM' : 'AM'}`,
-    dayOffset,
-  };
-}
+// formatTime24to12, addDelayToTime, and timeToMinutes are now imported from utils/time-formatting
+const formatTime24to12 = formatTimeWithDayOffset;
 
 /**
  * Calculate number of nights for a journey based on day offsets
@@ -82,7 +46,7 @@ function calculateNights(departDayOffset: number, arriveDayOffset: number): numb
  * @param plural - Plural form (defaults to singular + 's')
  */
 function pluralize(count: number, singular: string, plural?: string): string {
-  return count === 1 ? singular : (plural || `${singular}s`);
+  return count === 1 ? singular : plural || `${singular}s`;
 }
 
 // Helper function to parse time string (HH:MM AM/PM) and return minutes since midnight
@@ -93,14 +57,14 @@ const timeToMinutes = (timeStr: string): number => {
   const hours = parseInt(hoursStr);
   const minutes = parseInt(minutesStr);
   const isPM = timeStr.includes('PM');
-  
+
   let totalHours = hours;
   if (isPM && hours !== 12) {
     totalHours = hours + 12;
   } else if (!isPM && hours === 12) {
     totalHours = 0;
   }
-  
+
   return totalHours * 60 + minutes;
 };
 
@@ -117,7 +81,6 @@ function calculateDuration(startTime: string, endTime: string): string {
   return `${hours}h ${minutes}m`;
 }
 
-
 import { Alert } from 'react-native';
 
 export default function TrainDetailModal({ train, onClose, onStationSelect, onTrainSelect }: TrainDetailModalProps) {
@@ -130,9 +93,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
   const [error, setError] = React.useState<string | null>(null);
 
   // For live trains: track past stops, next stop, and future stops
-  const [allStops, setAllStops] = React.useState<
-    { time: string; dayOffset: number; name: string; code: string }[]
-  >([]);
+  const [allStops, setAllStops] = React.useState<{ time: string; dayOffset: number; name: string; code: string }[]>([]);
   const [isRouteExpanded, setIsRouteExpanded] = React.useState(false);
   const [isHeaderExpanded, setIsHeaderExpanded] = React.useState(false);
 
@@ -171,8 +132,12 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             // Calculate base day offset from the segment's departure station
             const fromStop = stops[fromIdx];
             const toStop = stops[toIdx];
-            const fromFormatted = fromStop.departure_time ? formatTime24to12(fromStop.departure_time) : { time: '', dayOffset: 0 };
-            const toFormatted = toStop.arrival_time ? formatTime24to12(toStop.arrival_time) : { time: '', dayOffset: 0 };
+            const fromFormatted = fromStop.departure_time
+              ? formatTime24to12(fromStop.departure_time)
+              : { time: '', dayOffset: 0 };
+            const toFormatted = toStop.arrival_time
+              ? formatTime24to12(toStop.arrival_time)
+              : { time: '', dayOffset: 0 };
 
             setSegmentBaseDayOffset(fromFormatted.dayOffset);
             setSegmentDepartDayOffset(fromFormatted.dayOffset);
@@ -183,7 +148,9 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             const segmentStops = stops.slice(fromIdx + 1, toIdx);
             setIntermediateStops(
               segmentStops.map(stop => {
-                const formatted = stop.departure_time ? formatTime24to12(stop.departure_time) : { time: '', dayOffset: 0 };
+                const formatted = stop.departure_time
+                  ? formatTime24to12(stop.departure_time)
+                  : { time: '', dayOffset: 0 };
                 return {
                   time: formatted.time,
                   dayOffset: formatted.dayOffset - fromFormatted.dayOffset, // Localize to segment
@@ -199,7 +166,9 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             setSegmentArriveDayOffset(0);
             setIntermediateStops(
               stops.slice(1, -1).map(stop => {
-                const formatted = stop.departure_time ? formatTime24to12(stop.departure_time) : { time: '', dayOffset: 0 };
+                const formatted = stop.departure_time
+                  ? formatTime24to12(stop.departure_time)
+                  : { time: '', dayOffset: 0 };
                 return {
                   time: formatted.time,
                   dayOffset: formatted.dayOffset,
@@ -222,9 +191,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
 
   React.useEffect(() => {
     if (error) {
-      Alert.alert('Error', error, [
-        { text: 'OK', onPress: onClose }
-      ]);
+      Alert.alert('Error', error, [{ text: 'OK', onPress: onClose }]);
     }
   }, [error, onClose]);
 
@@ -272,7 +239,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
     for (let i = 0; i < allStops.length; i++) {
       const stopMinutes = timeToMinutes(allStops[i].time);
       // Account for day offset - if stop is next day, add 24 hours
-      const adjustedStopMinutes = stopMinutes + (allStops[i].dayOffset * 24 * 60);
+      const adjustedStopMinutes = stopMinutes + allStops[i].dayOffset * 24 * 60;
       const adjustedCurrentMinutes = currentMinutes;
 
       if (adjustedStopMinutes > adjustedCurrentMinutes) {
@@ -321,8 +288,10 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
       const finalStopData = gtfsParser.getStop(finalStop.code);
       if (nextStopData && finalStopData) {
         remDistance = haversineDistance(
-          nextStopData.stop_lat, nextStopData.stop_lon,
-          finalStopData.stop_lat, finalStopData.stop_lon
+          nextStopData.stop_lat,
+          nextStopData.stop_lon,
+          finalStopData.stop_lat,
+          finalStopData.stop_lon
         );
       }
     } catch {}
@@ -357,8 +326,10 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
       const finalStopData = gtfsParser.getStop(finalStop.code);
       if (originStopData && finalStopData) {
         fullDistance = haversineDistance(
-          originStopData.stop_lat, originStopData.stop_lon,
-          finalStopData.stop_lat, finalStopData.stop_lon
+          originStopData.stop_lat,
+          originStopData.stop_lon,
+          finalStopData.stop_lat,
+          finalStopData.stop_lon
         );
       }
     } catch {}
@@ -375,7 +346,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
         onStationSelect(stationCode, stop.stop_lat, stop.stop_lon);
       }
     } catch (e) {
-      console.error('Failed to get station coordinates:', e);
+      logger.error('Failed to get station coordinates:', e);
     }
   };
 
@@ -389,15 +360,12 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
       {/* Header - Fixed outside ScrollView */}
       <View style={[styles.header, isScrolled && styles.headerScrolled]}>
         <View style={styles.headerContent}>
-          <Image
-            source={require('../../assets/images/amtrak.png')}
-            style={styles.headerLogo}
-            fadeDuration={0}
-          />
+          <Image source={require('../../assets/images/amtrak.png')} style={styles.headerLogo} fadeDuration={0} />
           <View style={styles.headerTextContainer}>
             <View style={styles.headerTop}>
               <Text style={styles.headerTitle} numberOfLines={1}>
-                {(trainData.routeName ? trainData.routeName : trainData.operator)} {trainData.trainNumber} • {trainData.date}
+                {trainData.routeName ? trainData.routeName : trainData.operator} {trainData.trainNumber} •{' '}
+                {trainData.date}
               </Text>
             </View>
             <TouchableOpacity
@@ -442,7 +410,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
           style={styles.scrollContent}
           contentContainerStyle={{ flexGrow: 1, paddingBottom: isHalfHeight ? SCREEN_HEIGHT * 0.5 : 100 }}
           showsVerticalScrollIndicator={true}
-          onScroll={(e) => {
+          onScroll={e => {
             const offsetY = e.nativeEvent.contentOffset.y;
             if (scrollOffset) scrollOffset.value = offsetY;
             setIsScrolled(offsetY > 0);
@@ -457,8 +425,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             <View style={styles.departsSection}>
               <Text style={[styles.departsText, { color: COLORS.secondary }]}>
                 {countdown.past ? 'Departed ' : 'Departs in '}
-                <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>{countdown.value}</Text>
-                {' '}
+                <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>{countdown.value}</Text>{' '}
                 <Text style={{ color: COLORS.secondary }}>{unitLabel.toLowerCase()}</Text>
               </Text>
             </View>
@@ -491,12 +458,23 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                     />
                     <View style={styles.durationLineRow}>
                       <View style={styles.durationContentRow}>
-                        <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} style={{ marginRight: 6 }} />
+                        <MaterialCommunityIcons
+                          name="clock-outline"
+                          size={14}
+                          color={COLORS.secondary}
+                          style={{ marginRight: 6 }}
+                        />
                         <Text style={styles.durationText}>{remainingDuration}</Text>
                         {remainingDistanceMiles !== null && (
-                          <Text style={[styles.durationText, { marginLeft: 0 }]}> • {remainingDistanceMiles.toFixed(0)} mi</Text>
+                          <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                            {' '}
+                            • {remainingDistanceMiles.toFixed(0)} mi
+                          </Text>
                         )}
-                        <Text style={[styles.durationText, { marginLeft: 0 }]}> • {remainingStopsCount} {pluralize(remainingStopsCount, 'stop')} left</Text>
+                        <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                          {' '}
+                          • {remainingStopsCount} {pluralize(remainingStopsCount, 'stop')} left
+                        </Text>
                         <TouchableOpacity
                           style={styles.elapsedStopsButton}
                           onPress={() => setIsRouteExpanded(true)}
@@ -550,7 +528,10 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                     activeOpacity={0.7}
                   >
                     <Text style={styles.locationCode}>{allStops[allStops.length - 1]?.code || trainData.toCode}</Text>
-                    <Text style={styles.locationName}> • {allStops[allStops.length - 1]?.name || gtfsParser.getStopName(trainData.toCode)}</Text>
+                    <Text style={styles.locationName}>
+                      {' '}
+                      • {allStops[allStops.length - 1]?.name || gtfsParser.getStopName(trainData.toCode)}
+                    </Text>
                   </TouchableOpacity>
                 </View>
                 <TimeDisplay
@@ -584,14 +565,23 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                   {/* Origin Stop */}
                   <View style={styles.infoSection}>
                     <View style={styles.infoHeader}>
-                      <MaterialCommunityIcons name="arrow-top-right" size={16} color={pastStopsCount > 0 ? COLORS.secondary : COLORS.primary} />
+                      <MaterialCommunityIcons
+                        name="arrow-top-right"
+                        size={16}
+                        color={pastStopsCount > 0 ? COLORS.secondary : COLORS.primary}
+                      />
                       <TouchableOpacity
                         style={styles.stationTouchable}
                         onPress={() => handleStationPress(allStops[0].code)}
                         activeOpacity={0.7}
                       >
-                        <Text style={[styles.locationCode, pastStopsCount > 0 && styles.elapsedText]}>{allStops[0].code}</Text>
-                        <Text style={[styles.locationName, pastStopsCount > 0 && styles.elapsedText]}> • {allStops[0].name}</Text>
+                        <Text style={[styles.locationCode, pastStopsCount > 0 && styles.elapsedText]}>
+                          {allStops[0].code}
+                        </Text>
+                        <Text style={[styles.locationName, pastStopsCount > 0 && styles.elapsedText]}>
+                          {' '}
+                          • {allStops[0].name}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                     <TimeDisplay
@@ -602,12 +592,20 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                     />
                     <View style={styles.durationLineRow}>
                       <View style={styles.durationContentRow}>
-                        <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} style={{ marginRight: 6 }} />
+                        <MaterialCommunityIcons
+                          name="clock-outline"
+                          size={14}
+                          color={COLORS.secondary}
+                          style={{ marginRight: 6 }}
+                        />
                         <Text style={styles.durationText}>{duration}</Text>
                         {distanceMiles !== null && (
                           <Text style={[styles.durationText, { marginLeft: 0 }]}> • {distanceMiles.toFixed(0)} mi</Text>
                         )}
-                        <Text style={[styles.durationText, { marginLeft: 0 }]}> • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}</Text>
+                        <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                          {' '}
+                          • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}
+                        </Text>
                         <TouchableOpacity
                           style={styles.elapsedStopsButton}
                           onPress={() => setIsRouteExpanded(false)}
@@ -688,14 +686,23 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                         return (
                           <View style={styles.infoSection}>
                             <View style={styles.infoHeader}>
-                              <MaterialCommunityIcons name="arrow-top-right" size={16} color={isOriginOutsideSegment ? COLORS.secondary : COLORS.primary} />
+                              <MaterialCommunityIcons
+                                name="arrow-top-right"
+                                size={16}
+                                color={isOriginOutsideSegment ? COLORS.secondary : COLORS.primary}
+                              />
                               <TouchableOpacity
                                 style={styles.stationTouchable}
                                 onPress={() => handleStationPress(allStops[0].code)}
                                 activeOpacity={0.7}
                               >
-                                <Text style={[styles.locationCode, isOriginOutsideSegment && styles.elapsedText]}>{allStops[0].code}</Text>
-                                <Text style={[styles.locationName, isOriginOutsideSegment && styles.elapsedText]}> • {allStops[0].name}</Text>
+                                <Text style={[styles.locationCode, isOriginOutsideSegment && styles.elapsedText]}>
+                                  {allStops[0].code}
+                                </Text>
+                                <Text style={[styles.locationName, isOriginOutsideSegment && styles.elapsedText]}>
+                                  {' '}
+                                  • {allStops[0].name}
+                                </Text>
                               </TouchableOpacity>
                             </View>
                             <TimeDisplay
@@ -706,12 +713,23 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                             />
                             <View style={styles.durationLineRow}>
                               <View style={styles.durationContentRow}>
-                                <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} style={{ marginRight: 6 }} />
+                                <MaterialCommunityIcons
+                                  name="clock-outline"
+                                  size={14}
+                                  color={COLORS.secondary}
+                                  style={{ marginRight: 6 }}
+                                />
                                 <Text style={styles.durationText}>{fullRouteDuration}</Text>
                                 {fullRouteDistanceMiles !== null && (
-                                  <Text style={[styles.durationText, { marginLeft: 0 }]}> • {fullRouteDistanceMiles.toFixed(0)} mi</Text>
+                                  <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                                    {' '}
+                                    • {fullRouteDistanceMiles.toFixed(0)} mi
+                                  </Text>
                                 )}
-                                <Text style={[styles.durationText, { marginLeft: 0 }]}> • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}</Text>
+                                <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                                  {' '}
+                                  • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}
+                                </Text>
                                 <TouchableOpacity
                                   style={styles.elapsedStopsButton}
                                   onPress={() => setIsRouteExpanded(false)}
@@ -749,10 +767,17 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                                   time={stop.time}
                                   dayOffset={stop.dayOffset}
                                   style={[styles.stopTime, isOutsideSegment && styles.elapsedText]}
-                                  superscriptStyle={[styles.stopTimeSuperscript, isOutsideSegment && styles.elapsedText]}
+                                  superscriptStyle={[
+                                    styles.stopTimeSuperscript,
+                                    isOutsideSegment && styles.elapsedText,
+                                  ]}
                                 />
-                                <Text style={[styles.stopStation, isOutsideSegment && styles.elapsedText]}>{stop.name}</Text>
-                                <Text style={[styles.stopCode, isOutsideSegment && styles.elapsedText]}>{stop.code}</Text>
+                                <Text style={[styles.stopStation, isOutsideSegment && styles.elapsedText]}>
+                                  {stop.name}
+                                </Text>
+                                <Text style={[styles.stopCode, isOutsideSegment && styles.elapsedText]}>
+                                  {stop.code}
+                                </Text>
                               </TouchableOpacity>
                             );
                           })}
@@ -770,21 +795,33 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                         return (
                           <View style={styles.infoSection}>
                             <View style={styles.infoHeader}>
-                              <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={isDestinationOutsideSegment ? COLORS.secondary : COLORS.primary} />
+                              <MaterialCommunityIcons
+                                name="arrow-bottom-left"
+                                size={16}
+                                color={isDestinationOutsideSegment ? COLORS.secondary : COLORS.primary}
+                              />
                               <TouchableOpacity
                                 style={styles.stationTouchable}
                                 onPress={() => handleStationPress(allStops[allStops.length - 1].code)}
                                 activeOpacity={0.7}
                               >
-                                <Text style={[styles.locationCode, isDestinationOutsideSegment && styles.elapsedText]}>{allStops[allStops.length - 1].code}</Text>
-                                <Text style={[styles.locationName, isDestinationOutsideSegment && styles.elapsedText]}> • {allStops[allStops.length - 1].name}</Text>
+                                <Text style={[styles.locationCode, isDestinationOutsideSegment && styles.elapsedText]}>
+                                  {allStops[allStops.length - 1].code}
+                                </Text>
+                                <Text style={[styles.locationName, isDestinationOutsideSegment && styles.elapsedText]}>
+                                  {' '}
+                                  • {allStops[allStops.length - 1].name}
+                                </Text>
                               </TouchableOpacity>
                             </View>
                             <TimeDisplay
                               time={allStops[allStops.length - 1].time}
                               dayOffset={allStops[allStops.length - 1].dayOffset}
                               style={[styles.timeText, isDestinationOutsideSegment && styles.elapsedText]}
-                              superscriptStyle={[styles.timeSuperscript, isDestinationOutsideSegment && styles.elapsedText]}
+                              superscriptStyle={[
+                                styles.timeSuperscript,
+                                isDestinationOutsideSegment && styles.elapsedText,
+                              ]}
                             />
                           </View>
                         );
@@ -836,13 +873,24 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                         })()}
                         <View style={styles.durationLineRow}>
                           <View style={styles.durationContentRow}>
-                            <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.secondary} style={{ marginRight: 6 }} />
+                            <MaterialCommunityIcons
+                              name="clock-outline"
+                              size={14}
+                              color={COLORS.secondary}
+                              style={{ marginRight: 6 }}
+                            />
                             <Text style={styles.durationText}>{duration}</Text>
                             {distanceMiles !== null && (
-                              <Text style={[styles.durationText, { marginLeft: 0 }]}> • {distanceMiles.toFixed(0)} mi</Text>
+                              <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                                {' '}
+                                • {distanceMiles.toFixed(0)} mi
+                              </Text>
                             )}
                             {intermediateStops && (
-                              <Text style={[styles.durationText, { marginLeft: 0 }]}> • {intermediateStops.length} {pluralize(intermediateStops.length, 'stop')}</Text>
+                              <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                                {' '}
+                                • {intermediateStops.length} {pluralize(intermediateStops.length, 'stop')}
+                              </Text>
                             )}
                             {isSegment && (
                               <TouchableOpacity
@@ -1255,7 +1303,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: FONTS.family,
     color: COLORS.secondary,
-    marginLeft: 0
+    marginLeft: 0,
   },
   // Elapsed stop text styling (secondary color for past stops)
   elapsedText: {

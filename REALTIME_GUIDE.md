@@ -13,6 +13,7 @@ This app integrates with the Transitdocs GTFS-RT feed to provide live train posi
 **Update Frequency:** Real-time (app polls every 15 seconds)
 
 **Data Included:**
+
 - Vehicle positions (lat/lon, speed, bearing)
 - Trip updates (delays, schedule adherence)
 - Train identification (trip ID, train number, vehicle ID)
@@ -24,6 +25,7 @@ This app integrates with the Transitdocs GTFS-RT feed to provide live train posi
 Transitdocs uses this format: `YYYY-MM-DD_AMTK_NNN`
 
 Examples:
+
 - `2026-01-16_AMTK_543` → Train 543
 - `2026-01-16_AMTK_228761` → Train 228761
 
@@ -36,6 +38,7 @@ The app supports flexible train ID matching:
 3. **Dual indexing** - Cache entries by both trip ID and train number
 
 This allows you to query with either:
+
 - Full trip ID: `"2026-01-16_AMTK_543"`
 - Just train number: `"543"`
 
@@ -97,8 +100,8 @@ console.log(`Delay at NYP: ${delay} minutes`);
 Format delay for user display.
 
 ```typescript
-console.log(RealtimeService.formatDelay(5));  // "Delayed 5m"
-console.log(RealtimeService.formatDelay(0));  // "On Time"
+console.log(RealtimeService.formatDelay(5)); // "Delayed 5m"
+console.log(RealtimeService.formatDelay(0)); // "On Time"
 console.log(RealtimeService.formatDelay(-2)); // "Early 2m"
 ```
 
@@ -145,7 +148,9 @@ if (train?.realtime?.position) {
 Update real-time data for an existing train object.
 
 ```typescript
-let train = { /* existing train object */ };
+let train = {
+  /* existing train object */
+};
 train = await TrainAPIService.refreshRealtimeData(train);
 // train.realtime now has latest position and delay
 ```
@@ -155,6 +160,7 @@ train = await TrainAPIService.refreshRealtimeData(train);
 ### Cache TTL: 15 seconds
 
 The app caches GTFS-RT data for 15 seconds to balance:
+
 - **Freshness** - Real-time updates appear quickly
 - **Performance** - Reduces API calls and parsing overhead
 - **Battery** - Limits network usage on mobile devices
@@ -184,9 +190,9 @@ The map automatically displays live train positions:
   .map((train) => (
     <Marker
       key={`live-${train.id}`}
-      coordinate={{ 
-        latitude: train.realtime!.position!.lat, 
-        longitude: train.realtime!.position!.lon 
+      coordinate={{
+        latitude: train.realtime!.position!.lat,
+        longitude: train.realtime!.position!.lon
       }}
       title={`Train ${train.trainNumber}`}
       description={train.realtime?.status || 'Live'}
@@ -201,12 +207,10 @@ The map automatically displays live train positions:
 useEffect(() => {
   const interval = setInterval(async () => {
     const trains = await TrainStorageService.getSavedTrains();
-    const refreshed = await Promise.all(
-      trains.map(train => TrainAPIService.refreshRealtimeData(train))
-    );
+    const refreshed = await Promise.all(trains.map(train => TrainAPIService.refreshRealtimeData(train)));
     setSavedTrains(refreshed);
   }, 30000);
-  
+
   return () => clearInterval(interval);
 }, []);
 ```
@@ -217,14 +221,14 @@ useEffect(() => {
 
 ```typescript
 interface RealtimePosition {
-  trip_id: string;           // Full trip ID
-  train_number?: string;     // Extracted train number
-  latitude: number;          // Decimal degrees
-  longitude: number;         // Decimal degrees
-  bearing?: number;          // 0-360 degrees (0 = North)
-  speed?: number;            // Miles per hour
-  timestamp: number;         // Unix timestamp (milliseconds)
-  vehicle_id?: string;       // Vehicle identifier
+  trip_id: string; // Full trip ID
+  train_number?: string; // Extracted train number
+  latitude: number; // Decimal degrees
+  longitude: number; // Decimal degrees
+  bearing?: number; // 0-360 degrees (0 = North)
+  speed?: number; // Miles per hour
+  timestamp: number; // Unix timestamp (milliseconds)
+  vehicle_id?: string; // Vehicle identifier
 }
 ```
 
@@ -234,8 +238,8 @@ interface RealtimePosition {
 interface RealtimeUpdate {
   trip_id: string;
   stop_id?: string;
-  arrival_delay?: number;    // Seconds (positive = late)
-  departure_delay?: number;  // Seconds (positive = late)
+  arrival_delay?: number; // Seconds (positive = late)
+  departure_delay?: number; // Seconds (positive = late)
   schedule_relationship?: 'SCHEDULED' | 'SKIPPED' | 'NO_DATA';
 }
 ```
@@ -247,9 +251,9 @@ interface Train {
   // ... schedule fields ...
   realtime?: {
     position?: { lat: number; lon: number };
-    delay?: number;          // Minutes
-    status?: string;         // "On Time", "Delayed 5m", etc.
-    lastUpdated?: number;    // Unix timestamp
+    delay?: number; // Minutes
+    status?: string; // "On Time", "Delayed 5m", etc.
+    lastUpdated?: number; // Unix timestamp
   };
 }
 ```
@@ -263,6 +267,7 @@ npx tsx test-realtime.ts
 ```
 
 Expected output:
+
 ```
 🚂 Testing Transitdocs GTFS-RT Integration...
 
@@ -314,10 +319,7 @@ The app only renders trains visible in the current map viewport:
 const visibleTrains = trains.filter(train => {
   if (!train.realtime?.position) return false;
   const { lat, lon } = train.realtime.position;
-  return (
-    lat >= bounds.minLat && lat <= bounds.maxLat &&
-    lon >= bounds.minLon && lon <= bounds.maxLon
-  );
+  return lat >= bounds.minLat && lat <= bounds.maxLat && lon >= bounds.minLon && lon <= bounds.maxLon;
 });
 ```
 
@@ -327,9 +329,7 @@ When refreshing multiple trains, use `Promise.all()`:
 
 ```typescript
 // Good: Parallel requests
-const updated = await Promise.all(
-  trains.map(t => TrainAPIService.refreshRealtimeData(t))
-);
+const updated = await Promise.all(trains.map(t => TrainAPIService.refreshRealtimeData(t)));
 
 // Bad: Sequential requests
 for (const train of trains) {

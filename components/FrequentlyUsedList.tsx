@@ -13,10 +13,16 @@ export interface FrequentlyUsedItemProps {
   type: 'train' | 'station';
 }
 
-export function FrequentlyUsedList({ items, onSelect }: { items: FrequentlyUsedItemProps[]; onSelect: (item: FrequentlyUsedItemProps) => void }) {
+export function FrequentlyUsedList({
+  items,
+  onSelect,
+}: {
+  items: FrequentlyUsedItemProps[];
+  onSelect: (item: FrequentlyUsedItemProps) => void;
+}) {
   return (
     <>
-      {items.map((item) => (
+      {items.map(item => (
         <TouchableOpacity
           key={item.id}
           style={styles.frequentlyUsedItem}
@@ -28,19 +34,14 @@ export function FrequentlyUsedList({ items, onSelect }: { items: FrequentlyUsedI
           accessibilityHint={`Select ${item.type === 'train' ? 'train route' : 'station'} ${item.name}`}
         >
           <View style={styles.frequentlyUsedIcon}>
-            {item.type === 'train' && (
-              item.name.toLowerCase().includes('acela') ? (
+            {item.type === 'train' &&
+              (item.name.toLowerCase().includes('acela') ? (
                 <Ionicons name="train" size={24} color={COLORS.primary} />
               ) : (
                 <FontAwesome6 name="train" size={20} color={COLORS.primary} />
-              )
-            )}
-            {item.type === 'station' && (
-              <Ionicons name="location" size={24} color={COLORS.primary} />
-            )}
-            {item.type === 'route' && (
-              <MaterialCommunityIcons name="train-track" size={24} color={COLORS.primary} />
-            )}
+              ))}
+            {item.type === 'station' && <Ionicons name="location" size={24} color={COLORS.primary} />}
+            {item.type === 'route' && <MaterialCommunityIcons name="train-track" size={24} color={COLORS.primary} />}
           </View>
           <View style={styles.frequentlyUsedText}>
             {item.type === 'train' ? (
@@ -49,7 +50,12 @@ export function FrequentlyUsedList({ items, onSelect }: { items: FrequentlyUsedI
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                   <Text style={styles.frequentlyUsedSubtitle}>{item.code.split('-')[0]}</Text>
                   <Text style={styles.frequentlyUsedSubtitle}> • </Text>
-                  <MaterialCommunityIcons name="arrow-right" size={16} color={COLORS.secondary} style={{ marginHorizontal: 2 }} />
+                  <MaterialCommunityIcons
+                    name="arrow-right"
+                    size={16}
+                    color={COLORS.secondary}
+                    style={{ marginHorizontal: 2 }}
+                  />
                   <Text style={styles.frequentlyUsedSubtitle}> • {item.code.split('-')[1]}</Text>
                 </View>
               </>

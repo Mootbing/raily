@@ -15,7 +15,7 @@ export function SearchBar({
   searchQuery: string;
   setIsSearchFocused: (v: boolean) => void;
   setSearchQuery: (v: string) => void;
-  snapToPoint?: (p: 'min'|'half'|'max') => void;
+  snapToPoint?: (p: 'min' | 'half' | 'max') => void;
   searchInputRef: React.RefObject<TextInput | null>;
 }) {
   // Always render as a button, but show different UI when search is active
@@ -26,7 +26,7 @@ export function SearchBar({
         <TextInput
           ref={searchInputRef}
           style={styles.searchInput}
-          placeholder={"Train name, station name/code, or route number"}
+          placeholder={'Train name, station name/code, or route number'}
           placeholderTextColor={COLORS.secondary}
           value={searchQuery}
           onChangeText={setSearchQuery}

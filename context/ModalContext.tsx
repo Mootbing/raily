@@ -106,73 +106,80 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   // Navigate to train detail modal
-  const navigateToTrain = useCallback((train: Train, options?: { fromMarker?: boolean; returnTo?: ModalType }) => {
-    const fromMarker = options?.fromMarker ?? false;
-    const returnTo = options?.returnTo;
+  const navigateToTrain = useCallback(
+    (train: Train, options?: { fromMarker?: boolean; returnTo?: ModalType }) => {
+      const fromMarker = options?.fromMarker ?? false;
+      const returnTo = options?.returnTo;
 
-    // Set up the transition
-    const targetSnap = fromMarker ? 'half' : 'max';
-    nextModalSnapRef.current = targetSnap;
+      // Set up the transition
+      const targetSnap = fromMarker ? 'half' : 'max';
+      nextModalSnapRef.current = targetSnap;
 
-    // Store the return destination if coming from departure board
-    const returnConfig: ModalConfig | null = returnTo === 'departureBoard' && modalData.station
-      ? { type: 'departureBoard', initialSnap: 'half', data: { station: modalData.station } }
-      : null;
+      // Store the return destination if coming from departure board
+      const returnConfig: ModalConfig | null =
+        returnTo === 'departureBoard' && modalData.station
+          ? { type: 'departureBoard', initialSnap: 'half', data: { station: modalData.station } }
+          : null;
 
-    pendingTransitionRef.current = {
-      target: {
-        type: 'trainDetail',
-        initialSnap: targetSnap,
-        data: { train },
-      },
-      returnTo: returnConfig,
-    };
+      pendingTransitionRef.current = {
+        target: {
+          type: 'trainDetail',
+          initialSnap: targetSnap,
+          data: { train },
+        },
+        returnTo: returnConfig,
+      };
 
-    // Update stack if we have a return destination
-    if (returnConfig) {
-      setModalStack(prev => [...prev, returnConfig]);
-    }
+      // Update stack if we have a return destination
+      if (returnConfig) {
+        setModalStack(prev => [...prev, returnConfig]);
+      }
 
-    // Store train data now (will be used when modal shows)
-    setModalData(prev => ({ ...prev, train }));
+      // Store train data now (will be used when modal shows)
+      setModalData(prev => ({ ...prev, train }));
 
-    // Dismiss current modal - the transition will happen in handleModalDismissed
-    if (activeModal === 'main') {
-      mainModalRef.current?.dismiss?.();
-    } else if (activeModal === 'departureBoard') {
-      departureBoardRef.current?.dismiss?.();
-    } else if (activeModal === 'trainDetail') {
-      // Transitioning from one train to another
-      detailModalRef.current?.dismiss?.();
-    }
-  }, [activeModal, modalData.station]);
+      // Dismiss current modal - the transition will happen in handleModalDismissed
+      if (activeModal === 'main') {
+        mainModalRef.current?.dismiss?.();
+      } else if (activeModal === 'departureBoard') {
+        departureBoardRef.current?.dismiss?.();
+      } else if (activeModal === 'trainDetail') {
+        // Transitioning from one train to another
+        detailModalRef.current?.dismiss?.();
+      }
+    },
+    [activeModal, modalData.station]
+  );
 
   // Navigate to station departure board
-  const navigateToStation = useCallback((station: Stop) => {
-    nextModalSnapRef.current = 'half';
+  const navigateToStation = useCallback(
+    (station: Stop) => {
+      nextModalSnapRef.current = 'half';
 
-    pendingTransitionRef.current = {
-      target: {
-        type: 'departureBoard',
-        initialSnap: 'half',
-        data: { station },
-      },
-      returnTo: null,
-    };
+      pendingTransitionRef.current = {
+        target: {
+          type: 'departureBoard',
+          initialSnap: 'half',
+          data: { station },
+        },
+        returnTo: null,
+      };
 
-    // Store station data now
-    setModalData(prev => ({ ...prev, station }));
+      // Store station data now
+      setModalData(prev => ({ ...prev, station }));
 
-    // Dismiss current modal
-    if (activeModal === 'main') {
-      mainModalRef.current?.dismiss?.();
-    } else if (activeModal === 'trainDetail') {
-      detailModalRef.current?.dismiss?.();
-    } else if (activeModal === 'departureBoard') {
-      // Transitioning from one station to another
-      departureBoardRef.current?.dismiss?.();
-    }
-  }, [activeModal]);
+      // Dismiss current modal
+      if (activeModal === 'main') {
+        mainModalRef.current?.dismiss?.();
+      } else if (activeModal === 'trainDetail') {
+        detailModalRef.current?.dismiss?.();
+      } else if (activeModal === 'departureBoard') {
+        // Transitioning from one station to another
+        departureBoardRef.current?.dismiss?.();
+      }
+    },
+    [activeModal]
+  );
 
   // Navigate back to main modal
   const navigateToMain = useCallback(() => {
@@ -296,9 +303,5 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     getInitialSnap,
   };
 
-  return (
-    <ModalContext.Provider value={value}>
-      {children}
-    </ModalContext.Provider>
-  );
+  return <ModalContext.Provider value={value}>{children}</ModalContext.Provider>;
 };

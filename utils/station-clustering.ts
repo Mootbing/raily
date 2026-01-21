@@ -26,10 +26,7 @@ export interface StationCluster {
  * @param latitudeDelta - Current map zoom level (larger = more zoomed out)
  * @returns Array of clusters or individual stations
  */
-export function clusterStations(
-  stations: Station[],
-  latitudeDelta: number
-): StationCluster[] {
+export function clusterStations(stations: Station[], latitudeDelta: number): StationCluster[] {
   // If zoomed in enough, show individual stations
   if (latitudeDelta < ClusteringConfig.stationClusterThreshold) {
     return stations.map(station => ({
@@ -54,10 +51,7 @@ export function clusterStations(
     // Find all nearby stations
     const nearbyStations = stations.filter(other => {
       if (processed.has(other.id)) return false;
-      const distance = Math.sqrt(
-        Math.pow(station.lat - other.lat, 2) +
-        Math.pow(station.lon - other.lon, 2)
-      );
+      const distance = Math.sqrt(Math.pow(station.lat - other.lat, 2) + Math.pow(station.lon - other.lon, 2));
       return distance <= clusterDistance;
     });
 
@@ -69,9 +63,7 @@ export function clusterStations(
     const avgLon = nearbyStations.reduce((sum, s) => sum + s.lon, 0) / nearbyStations.length;
 
     clusters.push({
-      id: nearbyStations.length === 1
-        ? nearbyStations[0].id
-        : `cluster-${avgLat}-${avgLon}`,
+      id: nearbyStations.length === 1 ? nearbyStations[0].id : `cluster-${avgLat}-${avgLon}`,
       lat: avgLat,
       lon: avgLon,
       stations: nearbyStations,
@@ -99,7 +91,11 @@ export function getStationAbbreviation(stationId: string, stationName: string): 
 
   // For multi-word names, try to use initials
   if (words.length >= 2) {
-    const initials = words.map(w => w[0]).join('').substring(0, 3).toUpperCase();
+    const initials = words
+      .map(w => w[0])
+      .join('')
+      .substring(0, 3)
+      .toUpperCase();
     if (initials.length === 3) return initials;
   }
 

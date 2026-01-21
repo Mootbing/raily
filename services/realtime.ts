@@ -6,6 +6,8 @@
 import { Alert } from 'react-native';
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { gtfsParser } from '../utils/gtfs-parser';
+import { extractTrainNumber } from '../utils/train-helpers';
+import { logger } from '../utils/logger';
 
 // Track last error alert time to avoid spamming user
 let lastErrorAlertTime = 0;
@@ -56,23 +58,20 @@ function showRealtimeErrorAlert(status: number): void {
 
   // Only show alert if enough consecutive errors and cooldown has passed
   const now = Date.now();
-  if (consecutiveErrors >= MAX_SILENT_ERRORS && (now - lastErrorAlertTime) > ERROR_ALERT_COOLDOWN) {
+  if (consecutiveErrors >= MAX_SILENT_ERRORS && now - lastErrorAlertTime > ERROR_ALERT_COOLDOWN) {
     lastErrorAlertTime = now;
 
     let message = 'Unable to fetch live train positions. ';
     if (status === 503) {
-      message += 'The Transitdocs service is temporarily unavailable. Train positions will update when service is restored.';
+      message +=
+        'The Transitdocs service is temporarily unavailable. Train positions will update when service is restored.';
     } else if (status === 429) {
       message += 'Too many requests. Please wait a moment.';
     } else {
       message += `Server returned error ${status}. Please try again later.`;
     }
 
-    Alert.alert(
-      'Live Data Unavailable',
-      message,
-      [{ text: 'OK', style: 'default' }]
-    );
+    Alert.alert('Live Data Unavailable', message, [{ text: 'OK', style: 'default' }]);
   }
 }
 
@@ -97,40 +96,22 @@ async function fetchProtobuf(url: string): Promise<Uint8Array> {
   return new Uint8Array(arrayBuffer);
 }
 
-/**
- * Extract train number from trip_id
- * Uses GTFS trips data for actual train number, falls back to parsing trip_id
- */
-function extractTrainNumber(tripId: string): string {
-  // Try to get from trips data first (source of truth)
-  const trainNumber = gtfsParser.getTrainNumber(tripId);
-  // If we got something different than the tripId, use it
-  if (trainNumber !== tripId) {
-    return trainNumber;
-  }
-  // Fallback: try to match pattern YYYY-MM-DD_AMTK_NNN for real-time data
-  const match = tripId.match(/_AMTK_(\d+)$/);
-  if (match) {
-    return match[1];
-  }
-  // Otherwise, assume trip_id is already a train number
-  return tripId;
-}
+// extractTrainNumber is now imported from utils/train-helpers
 
 /**
  * Parse GTFS-RT protobuf for vehicle positions
  */
 function parseVehiclePositions(buffer: Uint8Array): Map<string, RealtimePosition> {
   const positions = new Map<string, RealtimePosition>();
-  
+
   try {
     const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
-    
+
     for (const entity of feed.entity) {
       if (entity.vehicle && entity.vehicle.position && entity.vehicle.trip) {
         const tripId = entity.vehicle.trip.tripId || '';
         const trainNumber = extractTrainNumber(tripId);
-        
+
         positions.set(tripId, {
           trip_id: tripId,
           train_number: trainNumber,
@@ -138,12 +119,12 @@ function parseVehiclePositions(buffer: Uint8Array): Map<string, RealtimePosition
           longitude: entity.vehicle.position.longitude,
           bearing: entity.vehicle.position.bearing ?? undefined,
           speed: entity.vehicle.position.speed ?? undefined,
-          timestamp: entity.vehicle.timestamp 
+          timestamp: entity.vehicle.timestamp
             ? Number(entity.vehicle.timestamp) * 1000 // Convert to milliseconds
             : Date.now(),
           vehicle_id: entity.vehicle.vehicle?.id ?? undefined,
         });
-        
+
         // Also index by train number for easier lookup
         if (trainNumber !== tripId) {
           positions.set(trainNumber, positions.get(tripId)!);
@@ -151,9 +132,9 @@ function parseVehiclePositions(buffer: Uint8Array): Map<string, RealtimePosition
       }
     }
   } catch (error) {
-    console.error('Error parsing vehicle positions:', error);
+    logger.error('Error parsing vehicle positions:', error);
   }
-  
+
   return positions;
 }
 
@@ -162,16 +143,16 @@ function parseVehiclePositions(buffer: Uint8Array): Map<string, RealtimePosition
  */
 function parseTripUpdates(buffer: Uint8Array): Map<string, RealtimeUpdate[]> {
   const updates = new Map<string, RealtimeUpdate[]>();
-  
+
   try {
     const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
-    
+
     for (const entity of feed.entity) {
       if (entity.tripUpdate && entity.tripUpdate.trip) {
         const tripId = entity.tripUpdate.trip.tripId || '';
         const trainNumber = extractTrainNumber(tripId);
         const stopUpdates: RealtimeUpdate[] = [];
-        
+
         for (const stopTime of entity.tripUpdate.stopTimeUpdate || []) {
           stopUpdates.push({
             trip_id: tripId,
@@ -181,7 +162,7 @@ function parseTripUpdates(buffer: Uint8Array): Map<string, RealtimeUpdate[]> {
             schedule_relationship: stopTime.scheduleRelationship === 1 ? 'SCHEDULED' : 'NO_DATA',
           });
         }
-        
+
         if (stopUpdates.length > 0) {
           updates.set(tripId, stopUpdates);
           // Also index by train number
@@ -192,9 +173,9 @@ function parseTripUpdates(buffer: Uint8Array): Map<string, RealtimeUpdate[]> {
       }
     }
   } catch (error) {
-    console.error('Error parsing trip updates:', error);
+    logger.error('Error parsing trip updates:', error);
   }
-  
+
   return updates;
 }
 
@@ -206,19 +187,19 @@ export class RealtimeService {
   static async getPositionForTrip(tripIdOrTrainNumber: string): Promise<RealtimePosition | null> {
     try {
       const positions = await this.getAllPositions();
-      
+
       // Try direct lookup first
       let position = positions.get(tripIdOrTrainNumber);
-      
+
       // If not found, try extracting/matching train number
       if (!position) {
         const trainNumber = extractTrainNumber(tripIdOrTrainNumber);
         position = positions.get(trainNumber);
       }
-      
+
       return position || null;
     } catch (error) {
-      console.error('Error fetching real-time position:', error);
+      logger.error('Error fetching real-time position:', error);
       return null;
     }
   }
@@ -230,7 +211,7 @@ export class RealtimeService {
     try {
       // Check cache
       const now = Date.now();
-      if (positionsCache && (now - positionsCache.timestamp) < CACHE_TTL) {
+      if (positionsCache && now - positionsCache.timestamp < CACHE_TTL) {
         return positionsCache.data;
       }
 
@@ -242,7 +223,7 @@ export class RealtimeService {
       positionsCache = { data: positions, timestamp: now };
       return positions;
     } catch (error) {
-      console.error('Error fetching vehicle positions:', error);
+      logger.error('Error fetching vehicle positions:', error);
       // Return cached data if available, even if stale
       return positionsCache?.data || new Map();
     }
@@ -254,19 +235,19 @@ export class RealtimeService {
   static async getUpdatesForTrip(tripIdOrTrainNumber: string): Promise<RealtimeUpdate[]> {
     try {
       const updates = await this.getAllUpdates();
-      
+
       // Try direct lookup first
       let tripUpdates = updates.get(tripIdOrTrainNumber);
-      
+
       // If not found, try extracting/matching train number
       if (!tripUpdates) {
         const trainNumber = extractTrainNumber(tripIdOrTrainNumber);
         tripUpdates = updates.get(trainNumber);
       }
-      
+
       return tripUpdates || [];
     } catch (error) {
-      console.error('Error fetching trip updates:', error);
+      logger.error('Error fetching trip updates:', error);
       return [];
     }
   }
@@ -278,7 +259,7 @@ export class RealtimeService {
     try {
       // Check cache
       const now = Date.now();
-      if (updatesCache && (now - updatesCache.timestamp) < CACHE_TTL) {
+      if (updatesCache && now - updatesCache.timestamp < CACHE_TTL) {
         return updatesCache.data;
       }
 
@@ -290,7 +271,7 @@ export class RealtimeService {
       updatesCache = { data: updates, timestamp: now };
       return updates;
     } catch (error) {
-      console.error('Error fetching trip updates:', error);
+      logger.error('Error fetching trip updates:', error);
       // Return cached data if available, even if stale
       return updatesCache?.data || new Map();
     }
@@ -303,14 +284,14 @@ export class RealtimeService {
     try {
       const updates = await this.getUpdatesForTrip(tripIdOrTrainNumber);
       const stopUpdate = updates.find(u => u.stop_id === stopId);
-      
+
       if (stopUpdate && stopUpdate.departure_delay !== undefined) {
         return Math.round(stopUpdate.departure_delay / 60); // Convert seconds to minutes
       }
-      
+
       return null;
     } catch (error) {
-      console.error('Error getting delay:', error);
+      logger.error('Error getting delay:', error);
       return null;
     }
   }
@@ -335,7 +316,7 @@ export class RealtimeService {
     positionsCache = null;
     updatesCache = null;
   }
-  
+
   /**
    * Get all active trains with their current positions
    * Returns an array of {trainNumber, position} for easy consumption
@@ -344,7 +325,7 @@ export class RealtimeService {
     const positions = await this.getAllPositions();
     const trains: Array<{ trainNumber: string; position: RealtimePosition }> = [];
     const seen = new Set<string>();
-    
+
     for (const [key, position] of positions.entries()) {
       const trainNumber = position.train_number || extractTrainNumber(key);
       if (!seen.has(trainNumber)) {
@@ -352,7 +333,7 @@ export class RealtimeService {
         seen.add(trainNumber);
       }
     }
-    
+
     return trains;
   }
 }

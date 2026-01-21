@@ -14,9 +14,9 @@ export function RefreshButton({ onPress, disabled }: { onPress: () => void; disa
       accessibilityRole="button"
       accessibilityLabel="Refresh train schedules"
     >
-      <Ionicons 
-        name="refresh" 
-        size={24} 
+      <Ionicons
+        name="refresh"
+        size={24}
         color={disabled ? COLORS.secondary : COLORS.accentBlue}
         style={disabled ? styles.refreshIconSpinning : undefined}
       />

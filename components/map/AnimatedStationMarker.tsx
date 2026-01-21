@@ -19,12 +19,7 @@ interface AnimatedStationMarkerProps {
   onPress: () => void;
 }
 
-export function AnimatedStationMarker({
-  cluster,
-  showFullName,
-  displayName,
-  onPress,
-}: AnimatedStationMarkerProps) {
+export function AnimatedStationMarker({ cluster, showFullName, displayName, onPress }: AnimatedStationMarkerProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const [currentDisplay, setCurrentDisplay] = useState(displayName);

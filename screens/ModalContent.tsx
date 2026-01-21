@@ -11,9 +11,12 @@ import { ensureFreshGTFS, hasCachedGTFS, isCacheStale, loadCachedGTFS } from '..
 import { TrainStorageService } from '../services/storage';
 import type { SavedTrainRef, Train } from '../types/train';
 import { COLORS, styles } from './styles';
+import { parseTimeToDate } from '../utils/time-formatting';
+import { logger } from '../utils/logger';
 
 export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train) => void }) {
-  const { isFullscreen, isCollapsed, scrollOffset, panGesture, snapToPoint, setGestureEnabled } = useContext(SlideUpModalContext);
+  const { isFullscreen, isCollapsed, scrollOffset, panGesture, snapToPoint, setGestureEnabled } =
+    useContext(SlideUpModalContext);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const { savedTrains, setSavedTrains, setSelectedTrain } = useTrainContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -78,7 +81,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
             setRefreshStep('Checking GTFS cache');
 
             setRefreshPhases([]);
-            await ensureFreshGTFS((update) => {
+            await ensureFreshGTFS(update => {
               setRefreshProgress(update.progress);
               setRefreshStep(update.step + (update.detail ? ` • ${update.detail}` : ''));
               setRefreshPhases(prev => {
@@ -106,7 +109,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
           setRefreshStep('Downloading schedule data');
 
           setRefreshPhases([]);
-          await ensureFreshGTFS((update) => {
+          await ensureFreshGTFS(update => {
             setRefreshProgress(update.progress);
             setRefreshStep(update.step + (update.detail ? ` • ${update.detail}` : ''));
             setRefreshPhases(prev => {
@@ -122,7 +125,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
           setIsRefreshing(false);
         }
       } catch (error) {
-        console.error('GTFS initialization failed:', error);
+        logger.error('GTFS initialization failed:', error);
         setRefreshStep('Failed to load data');
         setIsLoadingCache(false);
         setIsRefreshing(false);
@@ -158,7 +161,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
     snapToPoint?.('min'); // Collapse to 35%
     try {
       setRefreshPhases([]);
-      const result = await ensureFreshGTFS((update) => {
+      const result = await ensureFreshGTFS(update => {
         setRefreshProgress(update.progress);
         setRefreshStep(update.step + (update.detail ? ` • ${update.detail}` : ''));
         setRefreshPhases(prev => {
@@ -176,7 +179,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
           'Cached GTFS is being used. Do you want to force a full refresh and fetch the latest GTFS data?',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Refresh Anyway', style: 'destructive', onPress: handleForceRefresh }
+            { text: 'Refresh Anyway', style: 'destructive', onPress: handleForceRefresh },
           ]
         );
         return;
@@ -184,12 +187,12 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
       await refreshFrequentlyUsed();
       setRefreshProgress(1);
       setRefreshStep('Refresh complete');
-      setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh complete' ? prev : [...prev, 'Refresh complete']);
+      setRefreshPhases(prev => (prev[prev.length - 1] === 'Refresh complete' ? prev : [...prev, 'Refresh complete']));
       Alert.alert('Refresh Complete', 'GTFS data has been refreshed successfully.');
     } catch (error) {
-      console.error('Manual refresh failed:', error);
+      logger.error('Manual refresh failed:', error);
       setRefreshStep('Refresh failed');
-      setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh failed' ? prev : [...prev, 'Refresh failed']);
+      setRefreshPhases(prev => (prev[prev.length - 1] === 'Refresh failed' ? prev : [...prev, 'Refresh failed']));
       Alert.alert('Refresh Failed', 'An error occurred while refreshing GTFS data.');
     } finally {
       setIsRefreshing(false);
@@ -206,7 +209,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
       setRefreshPhases([]);
       // Force refresh by clearing last fetch
       await AsyncStorage.removeItem('GTFS_LAST_FETCH');
-      await ensureFreshGTFS((update) => {
+      await ensureFreshGTFS(update => {
         setRefreshProgress(update.progress);
         setRefreshStep(update.step + (update.detail ? ` • ${update.detail}` : ''));
         setRefreshPhases(prev => {
@@ -219,12 +222,12 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
       await refreshFrequentlyUsed();
       setRefreshProgress(1);
       setRefreshStep('Refresh complete');
-      setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh complete' ? prev : [...prev, 'Refresh complete']);
+      setRefreshPhases(prev => (prev[prev.length - 1] === 'Refresh complete' ? prev : [...prev, 'Refresh complete']));
       Alert.alert('Refresh Complete', 'GTFS data has been refreshed successfully.');
     } catch (error) {
-      console.error('Manual refresh failed:', error);
+      logger.error('Manual refresh failed:', error);
       setRefreshStep('Refresh failed');
-      setRefreshPhases(prev => prev[prev.length - 1] === 'Refresh failed' ? prev : [...prev, 'Refresh failed']);
+      setRefreshPhases(prev => (prev[prev.length - 1] === 'Refresh failed' ? prev : [...prev, 'Refresh failed']));
       Alert.alert('Refresh Failed', 'An error occurred while refreshing GTFS data.');
     } finally {
       setIsRefreshing(false);
@@ -287,7 +290,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
       <View>
         <View style={styles.titleRow}>
           <Text style={styles.title}>
-            {isLoading ? (isLoadingCache ? 'Loading' : 'Fetching') : (isSearchFocused ? 'Add Train' : 'My Trains')}
+            {isLoading ? (isLoadingCache ? 'Loading' : 'Fetching') : isSearchFocused ? 'Add Train' : 'My Trains'}
           </Text>
         </View>
         {!isSearchFocused && !isLoading && (
@@ -299,11 +302,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
             accessibilityRole="button"
             accessibilityLabel="Refresh train schedules"
           >
-            <Ionicons
-              name="refresh"
-              size={24}
-              color={COLORS.primary}
-            />
+            <Ionicons name="refresh" size={24} color={COLORS.primary} />
           </TouchableOpacity>
         )}
 
@@ -318,12 +317,35 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
               >
                 {refreshStep || (isLoadingCache ? 'Loading cached data...' : 'Refreshing GTFS data...')}
               </Text>
-              <View style={{ width: '100%', height: 6, backgroundColor: COLORS.border.secondary, borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
-                <View style={{ height: '100%', backgroundColor: COLORS.accentBlue, borderRadius: 999, width: `${Math.max(5, refreshProgress * 100)}%` }} />
+              <View
+                style={{
+                  width: '100%',
+                  height: 6,
+                  backgroundColor: COLORS.border.secondary,
+                  borderRadius: 999,
+                  overflow: 'hidden',
+                  marginBottom: 8,
+                }}
+              >
+                <View
+                  style={{
+                    height: '100%',
+                    backgroundColor: COLORS.accentBlue,
+                    borderRadius: 999,
+                    width: `${Math.max(5, refreshProgress * 100)}%`,
+                  }}
+                />
               </View>
-              <Text style={[styles.progressValue, { marginBottom: 12, fontSize: 13, fontWeight: '600' }]}>{Math.round(refreshProgress * 100)}%</Text>
+              <Text style={[styles.progressValue, { marginBottom: 12, fontSize: 13, fontWeight: '600' }]}>
+                {Math.round(refreshProgress * 100)}%
+              </Text>
               {!isLoadingCache && (
-                <Text style={[styles.frequentlyUsedSubtitle, { fontSize: 11, textAlign: 'center', fontStyle: 'italic', marginTop: 4 }]}>
+                <Text
+                  style={[
+                    styles.frequentlyUsedSubtitle,
+                    { fontSize: 11, textAlign: 'center', fontStyle: 'italic', marginTop: 4 },
+                  ]}
+                >
                   This happens once per week to keep schedules current
                 </Text>
               )}
@@ -331,9 +353,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
           </View>
         )}
 
-        {isSearchFocused && (
-          <Text style={styles.subtitle}>Enter departure and arrival stations</Text>
-        )}
+        {isSearchFocused && <Text style={styles.subtitle}>Enter departure and arrival stations</Text>}
 
         {/* Search Button (when not searching) */}
         {!isLoading && !isSearchFocused && (
@@ -356,7 +376,7 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         scrollEnabled={isFullscreen}
-        onScroll={(e) => {
+        onScroll={e => {
           const offsetY = e.nativeEvent.contentOffset.y;
           scrollOffset.value = offsetY;
         }}
@@ -365,15 +385,12 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
         keyboardShouldPersistTaps="handled"
       >
         {isSearchFocused && !isCollapsed && (
-          <TwoStationSearch
-            onSelectTrip={handleSelectTrip}
-            onClose={handleCloseSearch}
-          />
+          <TwoStationSearch onSelectTrip={handleSelectTrip} onClose={handleCloseSearch} />
         )}
         {!isSearchFocused && !isLoading && (
           <TrainList
             flights={flights}
-            onTrainSelect={(train) => {
+            onTrainSelect={train => {
               setSelectedTrain(train);
               if (typeof onTrainSelect === 'function') onTrainSelect(train);
             }}
@@ -385,20 +402,13 @@ export function ModalContent({ onTrainSelect }: { onTrainSelect?: (train: Train)
   );
 }
 
-function parseTimeToDate(timeStr: string, baseDate: Date): Date {
-  const [time, meridian] = timeStr.split(' ');
-  const [hStr, mStr] = time.split(':');
-  let hours = parseInt(hStr, 10);
-  const minutes = parseInt(mStr, 10);
-  const isPM = (meridian || '').toUpperCase() === 'PM';
-  if (isPM && hours !== 12) hours += 12;
-  if (!isPM && hours === 12) hours = 0;
-  const d = new Date(baseDate);
-  d.setHours(hours, minutes, 0, 0);
-  return d;
-}
+// parseTimeToDate is now imported from utils/time-formatting
 
-function getCountdownForTrain(train: Train): { value: number; unit: 'DAYS' | 'HOURS' | 'MINUTES' | 'SECONDS'; past: boolean } {
+function getCountdownForTrain(train: Train): {
+  value: number;
+  unit: 'DAYS' | 'HOURS' | 'MINUTES' | 'SECONDS';
+  past: boolean;
+} {
   if (train.daysAway && train.daysAway > 0) {
     return { value: Math.round(train.daysAway), unit: 'DAYS', past: false };
   }

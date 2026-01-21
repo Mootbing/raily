@@ -13,6 +13,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import type { Route, Shape, Stop, StopTime, Trip } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
 import { shapeLoader } from './shape-loader';
+import { logger } from '../utils/logger';
 
 const GTFS_URL = 'https://content.amtrak.com/content/gtfs/GTFS.zip';
 const GTFS_CACHE_DIR = 'gtfs-cache';
@@ -41,9 +42,12 @@ function isOlderThanDays(dateMs: number, days: number): boolean {
 
 function safeJSONParse<T>(text: string | null): T | null {
   if (!text) return null;
-  try { return JSON.parse(text) as T; } catch { return null; }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
 }
-
 
 // No-op: Directory.exists is not available in this environment; rely on AsyncStorage for cache
 async function ensureCacheDir() {
@@ -98,7 +102,8 @@ function splitCSVLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { // escaped quote
+      if (inQuotes && line[i + 1] === '"') {
+        // escaped quote
         cur += '"';
         i++;
       } else {
@@ -113,7 +118,7 @@ function splitCSVLine(line: string): string[] {
   }
   result.push(cur);
   // Trim outer quotes
-  return result.map(v => v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v);
+  return result.map(v => (v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v));
 }
 
 async function fetchZipBytes(): Promise<Uint8Array> {
@@ -124,27 +129,31 @@ async function fetchZipBytes(): Promise<Uint8Array> {
 }
 
 function buildRoutes(rows: Array<Record<string, string>>): Route[] {
-  return rows.map(r => ({
-    route_id: r['route_id'],
-    agency_id: r['agency_id'] || undefined,
-    route_short_name: r['route_short_name'] || undefined,
-    route_long_name: r['route_long_name'] || r['route_short_name'] || r['route_id'],
-    route_type: r['route_type'] || undefined,
-    route_url: r['route_url'] || undefined,
-    route_color: r['route_color'] || undefined,
-    route_text_color: r['route_text_color'] || undefined,
-  })).filter(r => !!r.route_id);
+  return rows
+    .map(r => ({
+      route_id: r['route_id'],
+      agency_id: r['agency_id'] || undefined,
+      route_short_name: r['route_short_name'] || undefined,
+      route_long_name: r['route_long_name'] || r['route_short_name'] || r['route_id'],
+      route_type: r['route_type'] || undefined,
+      route_url: r['route_url'] || undefined,
+      route_color: r['route_color'] || undefined,
+      route_text_color: r['route_text_color'] || undefined,
+    }))
+    .filter(r => !!r.route_id);
 }
 
 function buildStops(rows: Array<Record<string, string>>): Stop[] {
-  return rows.map(r => ({
-    stop_id: r['stop_id'],
-    stop_name: r['stop_name'],
-    stop_url: r['stop_url'] || undefined,
-    stop_timezone: r['stop_timezone'] || undefined,
-    stop_lat: parseFloat(r['stop_lat']),
-    stop_lon: parseFloat(r['stop_lon']),
-  })).filter(s => !!s.stop_id && !!s.stop_name);
+  return rows
+    .map(r => ({
+      stop_id: r['stop_id'],
+      stop_name: r['stop_name'],
+      stop_url: r['stop_url'] || undefined,
+      stop_timezone: r['stop_timezone'] || undefined,
+      stop_lat: parseFloat(r['stop_lat']),
+      stop_lon: parseFloat(r['stop_lon']),
+    }))
+    .filter(s => !!s.stop_id && !!s.stop_name);
 }
 
 function buildStopTimes(rows: Array<Record<string, string>>): Record<string, StopTime[]> {
@@ -190,12 +199,14 @@ function buildShapes(rows: Array<Record<string, string>>): Record<string, Shape[
 }
 
 function buildTrips(rows: Array<Record<string, string>>): Trip[] {
-  return rows.map(r => ({
-    route_id: r['route_id'],
-    trip_id: r['trip_id'],
-    trip_short_name: r['trip_short_name'] || undefined,
-    trip_headsign: r['trip_headsign'] || undefined,
-  })).filter(t => !!t.trip_id);
+  return rows
+    .map(r => ({
+      route_id: r['route_id'],
+      trip_id: r['trip_id'],
+      trip_short_name: r['trip_short_name'] || undefined,
+      trip_headsign: r['trip_headsign'] || undefined,
+    }))
+    .filter(t => !!t.trip_id);
 }
 
 type ProgressUpdate = { step: string; progress: number; detail?: string };
@@ -206,9 +217,9 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
       onProgress?.({ step, progress: Math.min(1, Math.max(0, progress)), detail });
       // Progressive console logging
       if (detail) {
-        console.log(`[GTFS Refresh] ${step} (${Math.round(progress * 100)}%): ${detail}`);
+        logger.info(`[GTFS Refresh] ${step} (${Math.round(progress * 100)}%): ${detail}`);
       } else {
-        console.log(`[GTFS Refresh] ${step} (${Math.round(progress * 100)}%)`);
+        logger.info(`[GTFS Refresh] ${step} (${Math.round(progress * 100)}%)`);
       }
     };
 
@@ -251,7 +262,7 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
     const tripsTxt = files['trips.txt'] ? strFromU8(files['trips.txt']) : '';
 
     if (!routesTxt || !stopsTxt || !stopTimesTxt) {
-      console.error('[GTFS Refresh] Missing expected GTFS files (routes/stops/stop_times)');
+      logger.error('[GTFS Refresh] Missing expected GTFS files (routes/stops/stop_times)');
       throw new Error('Missing expected GTFS files (routes/stops/stop_times)');
     }
 
@@ -284,7 +295,7 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
     report('Refresh complete', 1, 'Applied latest GTFS');
     return { usedCache: false };
   } catch (err) {
-    console.error('[GTFS Refresh] GTFS sync failed:', err);
+    logger.error('[GTFS Refresh] GTFS sync failed:', err);
     onProgress?.({ step: 'GTFS refresh failed', progress: 1, detail: 'Check network connection' });
     return { usedCache: true };
   }
@@ -318,13 +329,13 @@ export async function loadCachedGTFS(): Promise<boolean> {
     if (routes && stops && stopTimes) {
       gtfsParser.overrideData(routes, stops, stopTimes, shapes || {}, trips || []);
       shapeLoader.initialize(shapes || {});
-      console.log('[GTFS] Loaded cached data on startup');
+      logger.info('[GTFS] Loaded cached data on startup');
       return true;
     }
-    console.log('[GTFS] No cached data found');
+    logger.info('[GTFS] No cached data found');
     return false;
   } catch (error) {
-    console.error('[GTFS] Failed to load cached data:', error);
+    logger.error('[GTFS] Failed to load cached data:', error);
     return false;
   }
 }

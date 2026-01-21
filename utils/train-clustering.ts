@@ -36,10 +36,7 @@ export interface TrainCluster {
  * @param latitudeDelta - Current map zoom level (larger = more zoomed out)
  * @returns Array of clusters or individual trains
  */
-export function clusterTrains(
-  trains: LiveTrainData[],
-  latitudeDelta: number
-): TrainCluster[] {
+export function clusterTrains(trains: LiveTrainData[], latitudeDelta: number): TrainCluster[] {
   // If zoomed in enough, show individual trains
   if (latitudeDelta < ClusteringConfig.trainClusterThreshold) {
     return trains.map(train => ({
@@ -68,8 +65,7 @@ export function clusterTrains(
     const nearbyTrains = trains.filter(other => {
       if (processed.has(other.tripId)) return false;
       const distance = Math.sqrt(
-        Math.pow(train.position.lat - other.position.lat, 2) +
-        Math.pow(train.position.lon - other.position.lon, 2)
+        Math.pow(train.position.lat - other.position.lat, 2) + Math.pow(train.position.lon - other.position.lon, 2)
       );
       return distance <= clusterDistance;
     });

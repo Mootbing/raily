@@ -26,6 +26,7 @@ import { getRouteColor, getStrokeWidthForZoom } from '../utils/route-colors';
 import { ClusteringConfig } from '../utils/clustering-config';
 import { clusterStations, getStationAbbreviation } from '../utils/station-clustering';
 import { clusterTrains } from '../utils/train-clustering';
+import { logger } from '../utils/logger';
 import { ModalContent } from './ModalContent';
 import { styles } from './styles';
 
@@ -49,15 +50,12 @@ function regionToViewportBounds(region: {
  * When modal is at 50%, center point at 20% from top (40% of visible area).
  * When no modal or fullscreen, center normally (no offset).
  */
-function getLatitudeOffsetForModal(
-  latitudeDelta: number,
-  modalSnap: 'min' | 'half' | 'max' | null
-): number {
+function getLatitudeOffsetForModal(latitudeDelta: number, modalSnap: 'min' | 'half' | 'max' | null): number {
   if (modalSnap === 'half') {
     // Modal covers 50% of screen, visible map is top 50%
     // To place point at 20% from top of screen = 40% of visible area
     // Offset = 30% of latitudeDelta (move center down so point appears higher)
-    return latitudeDelta * 0.30;
+    return latitudeDelta * 0.3;
   }
   // No offset for fullscreen modal, collapsed modal, or no modal
   return 0;
@@ -109,94 +107,127 @@ function MapScreenInner() {
   const { liveTrains } = useLiveTrains(15000, trainMode === 'all');
 
   // Handle train selection from list - animate map if has position, navigate to detail
-  const handleTrainSelect = useCallback((train: Train) => {
-    setSelectedTrain(train);
+  const handleTrainSelect = useCallback(
+    (train: Train) => {
+      setSelectedTrain(train);
 
-    // If train has realtime position, animate map to that location
-    const fromMarker = !!train.realtime?.position;
-    if (train.realtime?.position) {
-      const latitudeDelta = 0.05;
-      const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
-      mapRef.current?.animateToRegion({
-        latitude: train.realtime.position.lat - latitudeOffset,
-        longitude: train.realtime.position.lon,
-        latitudeDelta: latitudeDelta,
-        longitudeDelta: 0.05,
-      }, 500);
-    }
+      // If train has realtime position, animate map to that location
+      const fromMarker = !!train.realtime?.position;
+      if (train.realtime?.position) {
+        const latitudeDelta = 0.05;
+        const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
+        mapRef.current?.animateToRegion(
+          {
+            latitude: train.realtime.position.lat - latitudeOffset,
+            longitude: train.realtime.position.lon,
+            latitudeDelta: latitudeDelta,
+            longitudeDelta: 0.05,
+          },
+          500
+        );
+      }
 
-    navigateToTrain(train, { fromMarker });
-  }, [setSelectedTrain, navigateToTrain]);
+      navigateToTrain(train, { fromMarker });
+    },
+    [setSelectedTrain, navigateToTrain]
+  );
 
   // Handle train marker press on the map - center map on train and show detail at 50%
-  const handleTrainMarkerPress = useCallback((train: Train, lat: number, lon: number) => {
-    // Center map on train position with offset for 50% modal
-    const latitudeDelta = 0.05;
-    const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
-    mapRef.current?.animateToRegion({
-      latitude: lat - latitudeOffset,
-      longitude: lon,
-      latitudeDelta: latitudeDelta,
-      longitudeDelta: 0.05,
-    }, 500);
+  const handleTrainMarkerPress = useCallback(
+    (train: Train, lat: number, lon: number) => {
+      // Center map on train position with offset for 50% modal
+      const latitudeDelta = 0.05;
+      const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
+      mapRef.current?.animateToRegion(
+        {
+          latitude: lat - latitudeOffset,
+          longitude: lon,
+          latitudeDelta: latitudeDelta,
+          longitudeDelta: 0.05,
+        },
+        500
+      );
 
-    setSelectedTrain(train);
-    navigateToTrain(train, { fromMarker: true });
-  }, [setSelectedTrain, navigateToTrain]);
+      setSelectedTrain(train);
+      navigateToTrain(train, { fromMarker: true });
+    },
+    [setSelectedTrain, navigateToTrain]
+  );
 
   // Handle live train marker press - fetch train details then show modal
-  const handleLiveTrainMarkerPress = useCallback(async (tripId: string, lat: number, lon: number) => {
-    try {
-      const train = await TrainAPIService.getTrainDetails(tripId);
-      if (train) {
-        handleTrainMarkerPress(train, lat, lon);
+  const handleLiveTrainMarkerPress = useCallback(
+    async (tripId: string, lat: number, lon: number) => {
+      try {
+        const train = await TrainAPIService.getTrainDetails(tripId);
+        if (train) {
+          handleTrainMarkerPress(train, lat, lon);
+        }
+      } catch (error) {
+        logger.error('Error fetching train details:', error);
       }
-    } catch (error) {
-      console.error('Error fetching train details:', error);
-    }
-  }, [handleTrainMarkerPress]);
+    },
+    [handleTrainMarkerPress]
+  );
 
   // Handle station pin press - show departure board
-  const handleStationPress = useCallback((cluster: { id: string; lat: number; lon: number; isCluster: boolean; stations: Array<{ id: string; name: string; lat: number; lon: number }> }) => {
-    // If it's a cluster, just zoom in
-    if (cluster.isCluster) {
-      mapRef.current?.animateToRegion({
-        latitude: cluster.lat,
-        longitude: cluster.lon,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      }, 500);
-      return;
-    }
+  const handleStationPress = useCallback(
+    (cluster: {
+      id: string;
+      lat: number;
+      lon: number;
+      isCluster: boolean;
+      stations: Array<{ id: string; name: string; lat: number; lon: number }>;
+    }) => {
+      // If it's a cluster, just zoom in
+      if (cluster.isCluster) {
+        mapRef.current?.animateToRegion(
+          {
+            latitude: cluster.lat,
+            longitude: cluster.lon,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          },
+          500
+        );
+        return;
+      }
 
-    // Get the station data
-    const stationData = cluster.stations[0];
-    const stop: Stop = {
-      stop_id: stationData.id,
-      stop_name: stationData.name,
-      stop_lat: stationData.lat,
-      stop_lon: stationData.lon,
-    };
+      // Get the station data
+      const stationData = cluster.stations[0];
+      const stop: Stop = {
+        stop_id: stationData.id,
+        stop_name: stationData.name,
+        stop_lat: stationData.lat,
+        stop_lon: stationData.lon,
+      };
 
-    navigateToStation(stop);
-  }, [navigateToStation]);
+      navigateToStation(stop);
+    },
+    [navigateToStation]
+  );
 
   // Handle train selection from departure board
-  const handleDepartureBoardTrainSelect = useCallback((train: Train) => {
-    setSelectedTrain(train);
-    navigateToTrain(train, { fromMarker: false, returnTo: 'departureBoard' });
-  }, [setSelectedTrain, navigateToTrain]);
+  const handleDepartureBoardTrainSelect = useCallback(
+    (train: Train) => {
+      setSelectedTrain(train);
+      navigateToTrain(train, { fromMarker: false, returnTo: 'departureBoard' });
+    },
+    [setSelectedTrain, navigateToTrain]
+  );
 
   // Handle saving train from departure board swipe
-  const handleSaveTrainFromBoard = useCallback(async (train: Train): Promise<boolean> => {
-    if (!train.tripId) return false;
-    const saved = await TrainStorageService.saveTrain(train);
-    if (saved) {
-      const updatedTrains = await TrainStorageService.getSavedTrains();
-      setSavedTrains(updatedTrains);
-    }
-    return saved;
-  }, [setSavedTrains]);
+  const handleSaveTrainFromBoard = useCallback(
+    async (train: Train): Promise<boolean> => {
+      if (!train.tripId) return false;
+      const saved = await TrainStorageService.saveTrain(train);
+      if (saved) {
+        const updatedTrains = await TrainStorageService.getSavedTrains();
+        setSavedTrains(updatedTrains);
+      }
+      return saved;
+    },
+    [setSavedTrains]
+  );
 
   // Handle close button on departure board
   const handleDepartureBoardClose = useCallback(() => {
@@ -209,32 +240,41 @@ function MapScreenInner() {
   }, [goBack]);
 
   // Handle train-to-train navigation from detail modal
-  const handleTrainToTrainNavigation = useCallback((train: Train) => {
-    setSelectedTrain(train);
-    navigateToTrain(train, { fromMarker: false });
-  }, [setSelectedTrain, navigateToTrain]);
+  const handleTrainToTrainNavigation = useCallback(
+    (train: Train) => {
+      setSelectedTrain(train);
+      navigateToTrain(train, { fromMarker: false });
+    },
+    [setSelectedTrain, navigateToTrain]
+  );
 
   // Handle station selection from train detail - navigate to departure board
-  const handleStationSelectFromDetail = useCallback((stationCode: string, lat: number, lon: number) => {
-    // Animate map to station with offset for 50% modal
-    const latitudeDelta = 0.02;
-    const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
-    mapRef.current?.animateToRegion({
-      latitude: lat - latitudeOffset,
-      longitude: lon,
-      latitudeDelta: latitudeDelta,
-      longitudeDelta: 0.02,
-    }, 500);
+  const handleStationSelectFromDetail = useCallback(
+    (stationCode: string, lat: number, lon: number) => {
+      // Animate map to station with offset for 50% modal
+      const latitudeDelta = 0.02;
+      const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
+      mapRef.current?.animateToRegion(
+        {
+          latitude: lat - latitudeOffset,
+          longitude: lon,
+          latitudeDelta: latitudeDelta,
+          longitudeDelta: 0.02,
+        },
+        500
+      );
 
-    // Create a Stop object and navigate
-    const stop: Stop = {
-      stop_id: stationCode,
-      stop_name: gtfsParser.getStopName(stationCode),
-      stop_lat: lat,
-      stop_lon: lon,
-    };
-    navigateToStation(stop);
-  }, [navigateToStation]);
+      // Create a Stop object and navigate
+      const stop: Stop = {
+        stop_id: stationCode,
+        stop_name: gtfsParser.getStopName(stationCode),
+        stop_lat: lat,
+        stop_lon: lon,
+      };
+      navigateToStation(stop);
+    },
+    [navigateToStation]
+  );
 
   // Get user location on mount
   React.useEffect(() => {
@@ -259,7 +299,7 @@ function MapScreenInner() {
           });
         }
       } catch (error) {
-        console.error('Error getting initial location:', error);
+        logger.error('Error getting initial location:', error);
         // Fallback to San Francisco on error
         setRegion({
           latitude: 37.78825,
@@ -293,9 +333,7 @@ function MapScreenInner() {
 
     (async () => {
       const trains = await TrainStorageService.getSavedTrains();
-      const trainsWithRealtime = await Promise.all(
-        trains.map(train => TrainAPIService.refreshRealtimeData(train))
-      );
+      const trainsWithRealtime = await Promise.all(trains.map(train => TrainAPIService.refreshRealtimeData(train)));
       setSavedTrains(trainsWithRealtime);
     })();
   }, [setSavedTrains, gtfsLoaded]);
@@ -366,14 +404,17 @@ function MapScreenInner() {
       const location = await Location.getCurrentPositionAsync({});
       const latitudeDelta = 0.05;
       const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, currentSnap);
-      mapRef.current?.animateToRegion({
-        latitude: location.coords.latitude - latitudeOffset,
-        longitude: location.coords.longitude,
-        latitudeDelta: latitudeDelta,
-        longitudeDelta: 0.05,
-      }, 500);
+      mapRef.current?.animateToRegion(
+        {
+          latitude: location.coords.latitude - latitudeOffset,
+          longitude: location.coords.longitude,
+          latitudeDelta: latitudeDelta,
+          longitudeDelta: 0.05,
+        },
+        500
+      );
     } catch (error) {
-      console.error('Error getting location:', error);
+      logger.error('Error getting location:', error);
     }
   };
 
@@ -425,21 +466,22 @@ function MapScreenInner() {
         provider={PROVIDER_DEFAULT}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {shouldRenderRoutes && visibleShapes.map((shape) => {
-          const colorScheme = getRouteColor(shape.id);
-          return (
-            <AnimatedRoute
-              key={shape.id}
-              id={shape.id}
-              coordinates={shape.coordinates}
-              strokeColor={colorScheme.stroke}
-              strokeWidth={Math.max(2, baseStrokeWidth)}
-              zoomOpacity={colorScheme.opacity}
-            />
-          );
-        })}
+        {shouldRenderRoutes &&
+          visibleShapes.map(shape => {
+            const colorScheme = getRouteColor(shape.id);
+            return (
+              <AnimatedRoute
+                key={shape.id}
+                id={shape.id}
+                coordinates={shape.coordinates}
+                strokeColor={colorScheme.stroke}
+                strokeWidth={Math.max(2, baseStrokeWidth)}
+                zoomOpacity={colorScheme.opacity}
+              />
+            );
+          })}
 
-        {stationClusters.map((cluster) => {
+        {stationClusters.map(cluster => {
           // Show full name when zoomed in enough
           const showFullName = !cluster.isCluster && (region?.latitudeDelta ?? 1) < ClusteringConfig.fullNameThreshold;
           const displayName = cluster.isCluster
@@ -457,12 +499,15 @@ function MapScreenInner() {
                 // Center map on station with offset for 50% modal (departure board opens at half)
                 const latitudeDelta = 0.02;
                 const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
-                mapRef.current?.animateToRegion({
-                  latitude: cluster.lat - latitudeOffset,
-                  longitude: cluster.lon,
-                  latitudeDelta: latitudeDelta,
-                  longitudeDelta: 0.02,
-                }, 500);
+                mapRef.current?.animateToRegion(
+                  {
+                    latitude: cluster.lat - latitudeOffset,
+                    longitude: cluster.lon,
+                    latitudeDelta: latitudeDelta,
+                    longitudeDelta: 0.02,
+                  },
+                  500
+                );
                 // Show departure board
                 handleStationPress(cluster);
               }}
@@ -471,110 +516,94 @@ function MapScreenInner() {
         })}
 
         {/* Render saved trains when mode is 'saved' */}
-        {trainMode === 'saved' && (() => {
-          const savedTrainsWithPosition = savedTrains
-            .filter(train => train.realtime?.position)
-            .map(train => ({
-              tripId: train.tripId || `saved-${train.id}`,
-              trainNumber: train.trainNumber,
-              routeName: train.routeName,
-              position: {
-                lat: train.realtime!.position!.lat,
-                lon: train.realtime!.position!.lon,
-              },
-              isSaved: true,
-              originalTrain: train,
-            }));
+        {trainMode === 'saved' &&
+          (() => {
+            const savedTrainsWithPosition = savedTrains
+              .filter(train => train.realtime?.position)
+              .map(train => ({
+                tripId: train.tripId || `saved-${train.id}`,
+                trainNumber: train.trainNumber,
+                routeName: train.routeName,
+                position: {
+                  lat: train.realtime!.position!.lat,
+                  lon: train.realtime!.position!.lon,
+                },
+                isSaved: true,
+                originalTrain: train,
+              }));
 
-          const clusteredSavedTrains = clusterTrains(
-            savedTrainsWithPosition,
-            region?.latitudeDelta ?? 1
-          );
+            const clusteredSavedTrains = clusterTrains(savedTrainsWithPosition, region?.latitudeDelta ?? 1);
 
-          return clusteredSavedTrains.map((cluster) => (
-            <LiveTrainMarker
-              key={cluster.id}
-              trainNumber={cluster.trainNumber || ''}
-              routeName={cluster.routeName || null}
-              coordinate={{
-                latitude: cluster.lat,
-                longitude: cluster.lon,
-              }}
-              isSaved={true}
-              isCluster={cluster.isCluster}
-              clusterCount={cluster.trains.length}
-              onPress={() => {
-                if (!cluster.isCluster && cluster.trains[0]) {
-                  const train = (cluster.trains[0] as any).originalTrain;
-                  handleTrainMarkerPress(
-                    train,
-                    cluster.lat,
-                    cluster.lon
-                  );
-                }
-              }}
-            />
-          ));
-        })()}
+            return clusteredSavedTrains.map(cluster => (
+              <LiveTrainMarker
+                key={cluster.id}
+                trainNumber={cluster.trainNumber || ''}
+                routeName={cluster.routeName || null}
+                coordinate={{
+                  latitude: cluster.lat,
+                  longitude: cluster.lon,
+                }}
+                isSaved={true}
+                isCluster={cluster.isCluster}
+                clusterCount={cluster.trains.length}
+                onPress={() => {
+                  if (!cluster.isCluster && cluster.trains[0]) {
+                    const train = (cluster.trains[0] as any).originalTrain;
+                    handleTrainMarkerPress(train, cluster.lat, cluster.lon);
+                  }
+                }}
+              />
+            ));
+          })()}
 
         {/* Render all live trains when mode is 'all' */}
-        {trainMode === 'all' && (() => {
-          // Prepare trains with saved status
-          const trainsWithSavedStatus = liveTrains.map(train => {
-            const savedTrain = savedTrains.find(
-              saved => saved.trainNumber === train.trainNumber ||
-              (saved.tripId && saved.tripId.includes(train.trainNumber))
-            );
-            return {
-              tripId: train.tripId,
-              trainNumber: train.trainNumber,
-              routeName: train.routeName,
-              position: train.position,
-              isSaved: !!savedTrain,
-              savedTrain,
-            };
-          });
+        {trainMode === 'all' &&
+          (() => {
+            // Prepare trains with saved status
+            const trainsWithSavedStatus = liveTrains.map(train => {
+              const savedTrain = savedTrains.find(
+                saved =>
+                  saved.trainNumber === train.trainNumber || (saved.tripId && saved.tripId.includes(train.trainNumber))
+              );
+              return {
+                tripId: train.tripId,
+                trainNumber: train.trainNumber,
+                routeName: train.routeName,
+                position: train.position,
+                isSaved: !!savedTrain,
+                savedTrain,
+              };
+            });
 
-          const clusteredTrains = clusterTrains(
-            trainsWithSavedStatus,
-            region?.latitudeDelta ?? 1
-          );
+            const clusteredTrains = clusterTrains(trainsWithSavedStatus, region?.latitudeDelta ?? 1);
 
-          return clusteredTrains.map((cluster) => (
-            <LiveTrainMarker
-              key={cluster.id}
-              trainNumber={cluster.trainNumber || ''}
-              routeName={cluster.routeName || null}
-              coordinate={{
-                latitude: cluster.lat,
-                longitude: cluster.lon,
-              }}
-              isSaved={cluster.isSaved}
-              isCluster={cluster.isCluster}
-              clusterCount={cluster.trains.length}
-              onPress={() => {
-                if (!cluster.isCluster && cluster.trains[0]) {
-                  const trainData = cluster.trains[0] as any;
-                  // If it's a saved train, use its data directly
-                  if (trainData.savedTrain && trainData.savedTrain.realtime?.position) {
-                    handleTrainMarkerPress(
-                      trainData.savedTrain,
-                      cluster.lat,
-                      cluster.lon
-                    );
-                  } else {
-                    // Fetch train details for non-saved trains
-                    handleLiveTrainMarkerPress(
-                      trainData.tripId,
-                      cluster.lat,
-                      cluster.lon
-                    );
+            return clusteredTrains.map(cluster => (
+              <LiveTrainMarker
+                key={cluster.id}
+                trainNumber={cluster.trainNumber || ''}
+                routeName={cluster.routeName || null}
+                coordinate={{
+                  latitude: cluster.lat,
+                  longitude: cluster.lon,
+                }}
+                isSaved={cluster.isSaved}
+                isCluster={cluster.isCluster}
+                clusterCount={cluster.trains.length}
+                onPress={() => {
+                  if (!cluster.isCluster && cluster.trains[0]) {
+                    const trainData = cluster.trains[0] as any;
+                    // If it's a saved train, use its data directly
+                    if (trainData.savedTrain && trainData.savedTrain.realtime?.position) {
+                      handleTrainMarkerPress(trainData.savedTrain, cluster.lat, cluster.lon);
+                    } else {
+                      // Fetch train details for non-saved trains
+                      handleLiveTrainMarkerPress(trainData.tripId, cluster.lat, cluster.lon);
+                    }
                   }
-                }
-              }}
-            />
-          ));
-        })()}
+                }}
+              />
+            ));
+          })()}
       </MapView>
 
       <MapSettingsPill
@@ -600,18 +629,21 @@ function MapScreenInner() {
           onSnapChange={handleSnapChange}
         >
           <ModalContent
-            onTrainSelect={(trainOrStation) => {
+            onTrainSelect={trainOrStation => {
               // If it's a train, animate out main modal then show details
               if (trainOrStation && trainOrStation.departTime) {
                 handleTrainSelect(trainOrStation as Train);
               } else if (trainOrStation && (trainOrStation as any).lat && (trainOrStation as any).lon) {
                 // If it's a station, center map and collapse modal to 25%
-                mapRef.current?.animateToRegion({
-                  latitude: (trainOrStation as any).lat,
-                  longitude: (trainOrStation as any).lon,
-                  latitudeDelta: 0.05,
-                  longitudeDelta: 0.05,
-                }, 500);
+                mapRef.current?.animateToRegion(
+                  {
+                    latitude: (trainOrStation as any).lat,
+                    longitude: (trainOrStation as any).lon,
+                    latitudeDelta: 0.05,
+                    longitudeDelta: 0.05,
+                  },
+                  500
+                );
                 mainModalRef.current?.snapToPoint?.('min');
               }
             }}

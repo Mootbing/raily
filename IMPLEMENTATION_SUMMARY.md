@@ -9,6 +9,7 @@ Successfully integrated real-time train position data from Transitdocs GTFS-RT f
 ### 1. GTFS-RT Parser (`services/realtime.ts`)
 
 **Key Features:**
+
 - ✅ Protobuf parser using `gtfs-realtime-bindings`
 - ✅ 15-second cache with automatic expiration
 - ✅ Train number extraction from trip IDs (`2026-01-16_AMTK_543` → `543`)
@@ -17,31 +18,35 @@ Successfully integrated real-time train position data from Transitdocs GTFS-RT f
 - ✅ Trip update parsing (delays, schedule adherence)
 
 **New Methods:**
+
 ```typescript
-RealtimeService.getPositionForTrip(trainNumber)
-RealtimeService.getAllActiveTrains()
-RealtimeService.getUpdatesForTrip(trainNumber)
-RealtimeService.getDelayForStop(trainNumber, stopId)
+RealtimeService.getPositionForTrip(trainNumber);
+RealtimeService.getAllActiveTrains();
+RealtimeService.getUpdatesForTrip(trainNumber);
+RealtimeService.getDelayForStop(trainNumber, stopId);
 ```
 
 ### 2. API Integration (`services/api.ts`)
 
 **Enhancements:**
+
 - ✅ Automatic real-time enrichment for train details
 - ✅ New `getActiveTrains()` method for live train list
 - ✅ Train ID matching in `refreshRealtimeData()`
 - ✅ Fallback handling when GTFS schedule data is missing
 
 **Updated Methods:**
+
 ```typescript
-TrainAPIService.getTrainDetails()      // Now includes real-time data
-TrainAPIService.refreshRealtimeData()  // Matches by train number
-TrainAPIService.getActiveTrains()      // NEW: All active trains
+TrainAPIService.getTrainDetails(); // Now includes real-time data
+TrainAPIService.refreshRealtimeData(); // Matches by train number
+TrainAPIService.getActiveTrains(); // NEW: All active trains
 ```
 
 ### 3. Type Definitions (`types/train.ts`)
 
 **Extended Types:**
+
 ```typescript
 interface Train {
   // ... existing fields ...
@@ -54,7 +59,7 @@ interface Train {
 }
 
 interface RealtimePosition {
-  train_number?: string;  // NEW: For easier matching
+  train_number?: string; // NEW: For easier matching
   // ... other fields ...
 }
 ```
@@ -62,20 +67,22 @@ interface RealtimePosition {
 ### 4. UI Integration (`app/index.tsx`)
 
 **Already Working:**
+
 - ✅ Live train markers on map (lines 626-644)
 - ✅ Auto-refresh on app load (line 553)
 - ✅ Train detail modal with real-time status
 - ✅ Position-based filtering
 
 **Map Markers:**
+
 ```typescript
 {savedTrains
   .filter(train => train.realtime?.position)
   .map((train) => (
     <Marker
-      coordinate={{ 
-        latitude: train.realtime!.position!.lat, 
-        longitude: train.realtime!.position!.lon 
+      coordinate={{
+        latitude: train.realtime!.position!.lat,
+        longitude: train.realtime!.position!.lon
       }}
       title={`Train ${train.trainNumber}`}
     />
@@ -85,12 +92,14 @@ interface RealtimePosition {
 ### 5. Testing & Validation
 
 **Test Script:** `test-realtime.ts`
+
 - ✅ Fetches all active trains from Transitdocs
 - ✅ Displays sample positions, speeds, bearings
 - ✅ Tests train number lookup
 - ✅ Verifies delay information
 
 **Test Results:**
+
 ```
 ✅ Found 159 active trains
 ✅ Found updates for 175 trips
@@ -100,6 +109,7 @@ interface RealtimePosition {
 ### 6. Documentation
 
 **Created:**
+
 - ✅ Updated `README.md` with real-time features
 - ✅ Comprehensive `REALTIME_GUIDE.md` with API reference
 - ✅ Code comments and examples
@@ -171,16 +181,19 @@ Transitdocs Trip ID: "2026-01-16_AMTK_543"
 ## Key Files Changed
 
 ### New Files
+
 - ✅ `test-realtime.ts` - Integration test script
 - ✅ `REALTIME_GUIDE.md` - Comprehensive documentation
 
 ### Modified Files
+
 - ✅ `services/realtime.ts` - Complete rewrite with proper parsing
 - ✅ `services/api.ts` - Added real-time enrichment methods
 - ✅ `README.md` - Updated with real-time features
 - ✅ `package.json` - Added gtfs-realtime-bindings + tsx
 
 ### Unchanged (Already Working)
+
 - ✅ `app/index.tsx` - Map already displays live positions
 - ✅ `types/train.ts` - Already had realtime interface
 - ✅ `components/ui/train-detail-modal.tsx` - Shows status
@@ -190,10 +203,10 @@ Transitdocs Trip ID: "2026-01-16_AMTK_543"
 ```json
 {
   "dependencies": {
-    "gtfs-realtime-bindings": "^1.2.0"  // Protobuf parser
+    "gtfs-realtime-bindings": "^1.2.0" // Protobuf parser
   },
   "devDependencies": {
-    "tsx": "^4.x"  // TypeScript test runner
+    "tsx": "^4.x" // TypeScript test runner
   }
 }
 ```
@@ -225,12 +238,10 @@ console.log(`Delay: ${RealtimeService.formatDelay(delay)}`);
 useEffect(() => {
   const interval = setInterval(async () => {
     const trains = await TrainStorageService.getSavedTrains();
-    const updated = await Promise.all(
-      trains.map(t => TrainAPIService.refreshRealtimeData(t))
-    );
+    const updated = await Promise.all(trains.map(t => TrainAPIService.refreshRealtimeData(t)));
     setSavedTrains(updated);
   }, 30000);
-  
+
   return () => clearInterval(interval);
 }, []);
 ```
@@ -261,17 +272,20 @@ useEffect(() => {
 ## Next Steps (Future Enhancements)
 
 ### Immediate
+
 - [ ] Add auto-refresh interval to UI (every 30s)
 - [ ] Show "last updated" timestamp on markers
 - [ ] Add loading indicators during refresh
 
 ### Near-term
+
 - [ ] Historical breadcrumb trails
 - [ ] Speed-based marker colors (stopped vs moving)
 - [ ] Predictive arrival times
 - [ ] Push notifications for delays
 
 ### Long-term
+
 - [ ] WebSocket support for push updates
 - [ ] Offline mode with last-known positions
 - [ ] Train journey replay (time travel)
@@ -288,6 +302,7 @@ useEffect(() => {
 ## Conclusion
 
 ✅ **Successfully integrated real-time GTFS data**
+
 - 159 active trains tracked
 - Position accuracy validated
 - Train ID matching working perfectly

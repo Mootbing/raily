@@ -19,10 +19,8 @@ export default function SlideUpModalExample() {
       <SlideUpModal onSnapChange={setSnapPoint}>
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>Glassmorphic Modal</Text>
-          <Text style={styles.subtitle}>
-            Drag the handle up or down to resize
-          </Text>
-          
+          <Text style={styles.subtitle}>Drag the handle up or down to resize</Text>
+
           <View style={styles.contentBlock}>
             <Text style={styles.heading}>Features:</Text>
             <Text style={styles.text}>• Drag down to 25% of screen</Text>
@@ -35,8 +33,8 @@ export default function SlideUpModalExample() {
           <View style={styles.contentBlock}>
             <Text style={styles.heading}>How to use:</Text>
             <Text style={styles.text}>
-              Touch and drag the handle at the top to slide the modal to different positions.
-              Release to snap to the nearest position (25%, 50%, or 95%).
+              Touch and drag the handle at the top to slide the modal to different positions. Release to snap to the
+              nearest position (25%, 50%, or 95%).
             </Text>
           </View>
 

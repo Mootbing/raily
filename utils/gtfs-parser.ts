@@ -3,15 +3,7 @@
  * Data is populated dynamically via gtfs-sync service - no bundled fallback data
  */
 
-import type {
-  EnrichedStopTime,
-  Route,
-  SearchResult,
-  Shape,
-  Stop,
-  StopTime,
-  Trip,
-} from '../types/train';
+import type { EnrichedStopTime, Route, SearchResult, Shape, Stop, StopTime, Trip } from '../types/train';
 
 export class GTFSParser {
   private routes: Map<string, Route> = new Map();
@@ -31,7 +23,13 @@ export class GTFSParser {
   }
 
   // Override parser data with dynamically fetched cache
-  overrideData(routes: Route[], stops: Stop[], stopTimes: Record<string, StopTime[]>, shapes: Record<string, Shape[]> = {}, trips: Trip[] = []): void {
+  overrideData(
+    routes: Route[],
+    stops: Stop[],
+    stopTimes: Record<string, StopTime[]>,
+    shapes: Record<string, Shape[]> = {},
+    trips: Trip[] = []
+  ): void {
     this.routes.clear();
     this.stops.clear();
     this.stopTimes.clear();
@@ -90,20 +88,25 @@ export class GTFSParser {
   getIntermediateStops(tripId: string): EnrichedStopTime[] {
     const times = this.stopTimes.get(tripId) || [];
     // Filter out first and last stops, return intermediate stops
-    return times.slice(1, -1).map(time => ({
-      ...time,
-      stop_name: this.getStopName(time.stop_id),
-      stop_code: time.stop_id,
-    })).sort((a, b) => a.stop_sequence - b.stop_sequence);
+    return times
+      .slice(1, -1)
+      .map(time => ({
+        ...time,
+        stop_name: this.getStopName(time.stop_id),
+        stop_code: time.stop_id,
+      }))
+      .sort((a, b) => a.stop_sequence - b.stop_sequence);
   }
 
   getStopTimesForTrip(tripId: string): EnrichedStopTime[] {
     const times = this.stopTimes.get(tripId) || [];
-    return times.map(time => ({
-      ...time,
-      stop_name: this.getStopName(time.stop_id),
-      stop_code: time.stop_id,
-    })).sort((a, b) => a.stop_sequence - b.stop_sequence);
+    return times
+      .map(time => ({
+        ...time,
+        stop_name: this.getStopName(time.stop_id),
+        stop_code: time.stop_id,
+      }))
+      .sort((a, b) => a.stop_sequence - b.stop_sequence);
   }
 
   getTripsForStop(stopId: string): string[] {
@@ -200,7 +203,7 @@ export class GTFSParser {
     }
 
     // Search stops (stations)
-    this.stops.forEach((stop) => {
+    this.stops.forEach(stop => {
       if (stop.stop_name.toLowerCase().includes(queryLower)) {
         results.push({
           id: `stop-name-${stop.stop_id}`,
@@ -223,7 +226,7 @@ export class GTFSParser {
     });
 
     // Search routes
-    this.routes.forEach((route) => {
+    this.routes.forEach(route => {
       if (
         route.route_long_name.toLowerCase().includes(queryLower) ||
         route.route_short_name?.toLowerCase().includes(queryLower) ||
@@ -244,9 +247,8 @@ export class GTFSParser {
       const matchingTrips = this.tripsByNumber.get(trainNumberQuery) || [];
       for (const trip of matchingTrips.slice(0, 5)) {
         const routeName = this.getRouteName(trip.route_id);
-        const displayName = routeName !== 'Unknown Route'
-          ? `${routeName} ${trip.trip_short_name}`
-          : `Train ${trip.trip_short_name}`;
+        const displayName =
+          routeName !== 'Unknown Route' ? `${routeName} ${trip.trip_short_name}` : `Train ${trip.trip_short_name}`;
         results.push({
           id: `train-${trip.trip_id}`,
           name: displayName,
@@ -262,13 +264,16 @@ export class GTFSParser {
       const trainNumber = this.getTrainNumber(tripId);
       const trip = this.trips.get(tripId);
       const routeName = trip?.route_id ? this.getRouteName(trip.route_id) : '';
-      const displayName = routeName && routeName !== 'Unknown Route'
-        ? `${routeName} ${trainNumber}`
-        : `Train ${trainNumber}`;
+      const displayName =
+        routeName && routeName !== 'Unknown Route' ? `${routeName} ${trainNumber}` : `Train ${trainNumber}`;
 
       // Check for AMT{train} or {name}{train} match (legacy support)
       const tripIdLower = tripId.toLowerCase();
-      if (trainNumberQuery && tripIdLower.endsWith(trainNumberQuery) && !results.find(r => r.id === `train-${tripId}`)) {
+      if (
+        trainNumberQuery &&
+        tripIdLower.endsWith(trainNumberQuery) &&
+        !results.find(r => r.id === `train-${tripId}`)
+      ) {
         results.push({
           id: `tripid-${tripId}`,
           name: displayName,
@@ -278,7 +283,7 @@ export class GTFSParser {
         });
       }
       const uniqueStops = new Set(times.map(t => t.stop_id));
-      uniqueStops.forEach((stopId) => {
+      uniqueStops.forEach(stopId => {
         const stop = this.stops.get(stopId);
         if (stop && stop.stop_name.toLowerCase().includes(queryLower)) {
           results.push({
@@ -295,7 +300,7 @@ export class GTFSParser {
     // Remove duplicates and limit results
     const seen = new Set<string>();
     return results
-      .filter((result) => {
+      .filter(result => {
         if (seen.has(result.id)) return false;
         seen.add(result.id);
         return true;
@@ -328,7 +333,10 @@ export class GTFSParser {
 
   // Get shapes grouped by route
   getShapesByRoute(): Map<string, Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>> {
-    const shapesByRoute = new Map<string, Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>>();
+    const shapesByRoute = new Map<
+      string,
+      Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>
+    >();
     // Return all shapes grouped together
     const allShapes = this.getShapesForMap();
     shapesByRoute.set('all', allShapes);
@@ -342,11 +350,8 @@ export class GTFSParser {
     const queryLower = query.toLowerCase();
     const results: Stop[] = [];
 
-    this.stops.forEach((stop) => {
-      if (
-        stop.stop_name.toLowerCase().includes(queryLower) ||
-        stop.stop_id.toLowerCase().includes(queryLower)
-      ) {
+    this.stops.forEach(stop => {
+      if (stop.stop_name.toLowerCase().includes(queryLower) || stop.stop_id.toLowerCase().includes(queryLower)) {
         results.push(stop);
       }
     });
@@ -357,7 +362,10 @@ export class GTFSParser {
   /**
    * Find all trips that stop at both stations in sequence (fromStop before toStop)
    */
-  findTripsWithStops(fromStopId: string, toStopId: string): Array<{
+  findTripsWithStops(
+    fromStopId: string,
+    toStopId: string
+  ): Array<{
     tripId: string;
     fromStop: EnrichedStopTime;
     toStop: EnrichedStopTime;

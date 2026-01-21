@@ -54,13 +54,7 @@ function parseColor(color: string): { r: number; g: number; b: number; a: number
   return { r: 128, g: 128, b: 128, a: 1 };
 }
 
-export function AnimatedRoute({
-  id,
-  coordinates,
-  strokeColor,
-  strokeWidth,
-  zoomOpacity = 1,
-}: AnimatedRouteProps) {
+export function AnimatedRoute({ id, coordinates, strokeColor, strokeWidth, zoomOpacity = 1 }: AnimatedRouteProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [opacity, setOpacity] = useState(0);
   const baseColor = useRef(parseColor(strokeColor));

@@ -2,13 +2,7 @@ import { BlurView } from 'expo-blur';
 import * as Network from 'expo-network';
 import React from 'react';
 import { Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, {
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { AppColors, BlurIntensity } from '../../constants/theme';
@@ -178,27 +172,18 @@ export default function MapSettingsPill({
       <View style={StyleSheet.absoluteFill}>
         <BlurView intensity={BlurIntensity} style={StyleSheet.absoluteFill}>
           {/* Collapsed Content - Settings + Recenter + (optional) Offline buttons */}
-          <Animated.View style={[styles.collapsedContent, collapsedContentStyle]} pointerEvents={isExpanded ? 'none' : 'auto'}>
-            <TouchableOpacity
-              style={styles.pillButton}
-              onPress={handleSettingsPress}
-              activeOpacity={0.7}
-            >
+          <Animated.View
+            style={[styles.collapsedContent, collapsedContentStyle]}
+            pointerEvents={isExpanded ? 'none' : 'auto'}
+          >
+            <TouchableOpacity style={styles.pillButton} onPress={handleSettingsPress} activeOpacity={0.7}>
               <Ionicons name="settings-outline" size={24} color={AppColors.primary} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.pillButton}
-              onPress={onRecenter}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={styles.pillButton} onPress={onRecenter} activeOpacity={0.7}>
               <MaterialIcons name="my-location" size={22} color={AppColors.primary} />
             </TouchableOpacity>
             {!isConnected && (
-              <TouchableOpacity
-                style={styles.pillButton}
-                onPress={handleOfflinePress}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.pillButton} onPress={handleOfflinePress} activeOpacity={0.7}>
                 <View style={styles.offlineIconContainer}>
                   <Ionicons name="wifi" size={22} color={AppColors.error} />
                   <View style={styles.offlineExclamation}>
@@ -210,7 +195,10 @@ export default function MapSettingsPill({
           </Animated.View>
 
           {/* Expanded Content - Settings strip */}
-          <Animated.View style={[styles.expandedContent, expandedContentStyle]} pointerEvents={isExpanded ? 'auto' : 'none'}>
+          <Animated.View
+            style={[styles.expandedContent, expandedContentStyle]}
+            pointerEvents={isExpanded ? 'auto' : 'none'}
+          >
             {/* Routes */}
             <TouchableOpacity
               style={styles.settingOption}
@@ -234,7 +222,12 @@ export default function MapSettingsPill({
                 size={20}
                 color={stationMode === 'hidden' ? AppColors.tertiary : AppColors.primary}
               />
-              <Text style={[styles.settingLabel, { color: stationMode === 'hidden' ? AppColors.tertiary : AppColors.primary }]}>
+              <Text
+                style={[
+                  styles.settingLabel,
+                  { color: stationMode === 'hidden' ? AppColors.tertiary : AppColors.primary },
+                ]}
+              >
                 {getStationModeLabel(stationMode)}
               </Text>
             </TouchableOpacity>
@@ -268,11 +261,7 @@ export default function MapSettingsPill({
             </TouchableOpacity>
 
             {/* Close */}
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={handleClose}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={styles.closeButton} onPress={handleClose} activeOpacity={0.7}>
               <Ionicons name="close" size={24} color={AppColors.primary} />
             </TouchableOpacity>
           </Animated.View>

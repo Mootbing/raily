@@ -6,51 +6,13 @@
 import type { EnrichedStopTime, Route, SearchResult, Stop, Train } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
 import { RealtimeService } from './realtime';
+import { formatTime, formatTimeWithDayOffset, type FormattedTime } from '../utils/time-formatting';
+import { extractTrainNumber } from '../utils/train-helpers';
+import { logger } from '../utils/logger';
 
-/**
- * Format 24-hour time to 12-hour AM/PM format
- * Handles overnight trains where hours >= 24 (GTFS standard)
- * Returns object with formatted time and day offset indicator
- */
-export interface FormattedTime {
-  time: string;
-  dayOffset: number; // 0 = same day, 1 = next day, 2 = two days later, etc.
-}
-
-export function formatTime(time24: string): string {
-  const result = formatTimeWithDayOffset(time24);
-  return result.dayOffset > 0 ? `${result.time} +${result.dayOffset}` : result.time;
-}
-
-export function formatTimeWithDayOffset(time24: string): FormattedTime {
-  const [hours, minutes] = time24.substring(0, 5).split(':');
-  let h = parseInt(hours);
-  const m = minutes;
-
-  // Handle overnight trains (hours >= 24 means next day in GTFS)
-  // Can be 24-47 for +1 day, 48-71 for +2 days, etc.
-  const dayOffset = Math.floor(h / 24);
-  h = h % 24;
-
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  if (h > 12) h -= 12;
-  if (h === 0) h = 12;
-
-  return {
-    time: `${h}:${m} ${ampm}`,
-    dayOffset,
-  };
-}
-
-/**
- * Extract the actual train number from a tripId
- * Uses GTFS trips.txt trip_short_name as source of truth
- * Falls back to parsing trip_id if trips data not available
- */
-export function extractTrainNumber(tripId: string): string {
-  // Try to get from trips data first (source of truth)
-  return gtfsParser.getTrainNumber(tripId);
-}
+// Re-export for backwards compatibility
+export { formatTime, formatTimeWithDayOffset, extractTrainNumber };
+export type { FormattedTime };
 
 /**
  * Amtrak train number to route name mapping
@@ -58,119 +20,368 @@ export function extractTrainNumber(tripId: string): string {
  */
 const AMTRAK_ROUTE_NAMES: Record<string, string> = {
   // Northeast Corridor
-  '2100': 'Acela', '2101': 'Acela', '2103': 'Acela', '2105': 'Acela', '2107': 'Acela', '2109': 'Acela',
-  '2111': 'Acela', '2113': 'Acela', '2115': 'Acela', '2117': 'Acela', '2119': 'Acela', '2121': 'Acela',
-  '2123': 'Acela', '2125': 'Acela', '2127': 'Acela', '2129': 'Acela', '2131': 'Acela', '2133': 'Acela',
-  '2150': 'Acela', '2151': 'Acela', '2153': 'Acela', '2155': 'Acela', '2157': 'Acela', '2159': 'Acela',
-  '2161': 'Acela', '2163': 'Acela', '2165': 'Acela', '2167': 'Acela', '2169': 'Acela', '2171': 'Acela',
-  '2173': 'Acela', '2175': 'Acela', '2200': 'Acela', '2201': 'Acela', '2203': 'Acela', '2205': 'Acela',
-  '2207': 'Acela', '2209': 'Acela', '2211': 'Acela', '2213': 'Acela', '2215': 'Acela', '2217': 'Acela',
-  '2219': 'Acela', '2221': 'Acela', '2223': 'Acela', '2225': 'Acela', '2227': 'Acela', '2229': 'Acela',
-  '2231': 'Acela', '2233': 'Acela', '2235': 'Acela', '2237': 'Acela', '2239': 'Acela', '2241': 'Acela',
-  '2243': 'Acela', '2245': 'Acela', '2247': 'Acela', '2249': 'Acela', '2250': 'Acela', '2251': 'Acela',
-  '2253': 'Acela', '2255': 'Acela', '2257': 'Acela',
+  '2100': 'Acela',
+  '2101': 'Acela',
+  '2103': 'Acela',
+  '2105': 'Acela',
+  '2107': 'Acela',
+  '2109': 'Acela',
+  '2111': 'Acela',
+  '2113': 'Acela',
+  '2115': 'Acela',
+  '2117': 'Acela',
+  '2119': 'Acela',
+  '2121': 'Acela',
+  '2123': 'Acela',
+  '2125': 'Acela',
+  '2127': 'Acela',
+  '2129': 'Acela',
+  '2131': 'Acela',
+  '2133': 'Acela',
+  '2150': 'Acela',
+  '2151': 'Acela',
+  '2153': 'Acela',
+  '2155': 'Acela',
+  '2157': 'Acela',
+  '2159': 'Acela',
+  '2161': 'Acela',
+  '2163': 'Acela',
+  '2165': 'Acela',
+  '2167': 'Acela',
+  '2169': 'Acela',
+  '2171': 'Acela',
+  '2173': 'Acela',
+  '2175': 'Acela',
+  '2200': 'Acela',
+  '2201': 'Acela',
+  '2203': 'Acela',
+  '2205': 'Acela',
+  '2207': 'Acela',
+  '2209': 'Acela',
+  '2211': 'Acela',
+  '2213': 'Acela',
+  '2215': 'Acela',
+  '2217': 'Acela',
+  '2219': 'Acela',
+  '2221': 'Acela',
+  '2223': 'Acela',
+  '2225': 'Acela',
+  '2227': 'Acela',
+  '2229': 'Acela',
+  '2231': 'Acela',
+  '2233': 'Acela',
+  '2235': 'Acela',
+  '2237': 'Acela',
+  '2239': 'Acela',
+  '2241': 'Acela',
+  '2243': 'Acela',
+  '2245': 'Acela',
+  '2247': 'Acela',
+  '2249': 'Acela',
+  '2250': 'Acela',
+  '2251': 'Acela',
+  '2253': 'Acela',
+  '2255': 'Acela',
+  '2257': 'Acela',
   // Long-distance trains
-  '1': 'Sunset Limited', '2': 'Sunset Limited',
-  '3': 'Southwest Chief', '4': 'Southwest Chief',
-  '5': 'California Zephyr', '6': 'California Zephyr',
-  '7': 'Empire Builder', '8': 'Empire Builder', '27': 'Empire Builder', '28': 'Empire Builder',
-  '11': 'Coast Starlight', '14': 'Coast Starlight',
-  '19': 'Crescent', '20': 'Crescent',
-  '21': 'Texas Eagle', '22': 'Texas Eagle', '421': 'Texas Eagle', '422': 'Texas Eagle',
-  '29': 'Capitol Limited', '30': 'Capitol Limited',
-  '48': 'Lake Shore Limited', '49': 'Lake Shore Limited', '448': 'Lake Shore Limited', '449': 'Lake Shore Limited',
-  '50': 'Cardinal', '51': 'Cardinal',
-  '52': 'Auto Train', '53': 'Auto Train',
-  '58': 'City of New Orleans', '59': 'City of New Orleans',
-  '66': 'Palmetto', '67': 'Northeast Regional',
-  '79': 'Carolinian', '80': 'Carolinian',
-  '89': 'Palmetto', '90': 'Palmetto',
-  '91': 'Silver Star', '92': 'Silver Star',
-  '97': 'Silver Meteor', '98': 'Silver Meteor',
+  '1': 'Sunset Limited',
+  '2': 'Sunset Limited',
+  '3': 'Southwest Chief',
+  '4': 'Southwest Chief',
+  '5': 'California Zephyr',
+  '6': 'California Zephyr',
+  '7': 'Empire Builder',
+  '8': 'Empire Builder',
+  '27': 'Empire Builder',
+  '28': 'Empire Builder',
+  '11': 'Coast Starlight',
+  '14': 'Coast Starlight',
+  '19': 'Crescent',
+  '20': 'Crescent',
+  '21': 'Texas Eagle',
+  '22': 'Texas Eagle',
+  '421': 'Texas Eagle',
+  '422': 'Texas Eagle',
+  '29': 'Capitol Limited',
+  '30': 'Capitol Limited',
+  '48': 'Lake Shore Limited',
+  '49': 'Lake Shore Limited',
+  '448': 'Lake Shore Limited',
+  '449': 'Lake Shore Limited',
+  '50': 'Cardinal',
+  '51': 'Cardinal',
+  '52': 'Auto Train',
+  '53': 'Auto Train',
+  '58': 'City of New Orleans',
+  '59': 'City of New Orleans',
+  '66': 'Palmetto',
+  '67': 'Northeast Regional',
+  '79': 'Carolinian',
+  '80': 'Carolinian',
+  '89': 'Palmetto',
+  '90': 'Palmetto',
+  '91': 'Silver Star',
+  '92': 'Silver Star',
+  '97': 'Silver Meteor',
+  '98': 'Silver Meteor',
   // Keystone/Pennsylvanian
-  '42': 'Pennsylvanian', '43': 'Pennsylvanian',
-  '600': 'Keystone', '601': 'Keystone', '602': 'Keystone', '603': 'Keystone',
-  '604': 'Keystone', '605': 'Keystone', '606': 'Keystone', '607': 'Keystone',
-  '608': 'Keystone', '609': 'Keystone', '610': 'Keystone', '611': 'Keystone',
-  '612': 'Keystone', '613': 'Keystone', '614': 'Keystone', '615': 'Keystone',
-  '616': 'Keystone', '617': 'Keystone', '618': 'Keystone', '619': 'Keystone',
-  '620': 'Keystone', '621': 'Keystone', '622': 'Keystone', '623': 'Keystone',
-  '624': 'Keystone', '625': 'Keystone', '626': 'Keystone', '627': 'Keystone',
-  '628': 'Keystone', '629': 'Keystone', '630': 'Keystone', '631': 'Keystone',
-  '640': 'Keystone', '641': 'Keystone', '642': 'Keystone', '643': 'Keystone',
-  '644': 'Keystone', '645': 'Keystone', '646': 'Keystone', '647': 'Keystone',
-  '648': 'Keystone', '649': 'Keystone', '650': 'Keystone', '651': 'Keystone',
-  '660': 'Keystone', '661': 'Keystone', '662': 'Keystone', '663': 'Keystone',
+  '42': 'Pennsylvanian',
+  '43': 'Pennsylvanian',
+  '600': 'Keystone',
+  '601': 'Keystone',
+  '602': 'Keystone',
+  '603': 'Keystone',
+  '604': 'Keystone',
+  '605': 'Keystone',
+  '606': 'Keystone',
+  '607': 'Keystone',
+  '608': 'Keystone',
+  '609': 'Keystone',
+  '610': 'Keystone',
+  '611': 'Keystone',
+  '612': 'Keystone',
+  '613': 'Keystone',
+  '614': 'Keystone',
+  '615': 'Keystone',
+  '616': 'Keystone',
+  '617': 'Keystone',
+  '618': 'Keystone',
+  '619': 'Keystone',
+  '620': 'Keystone',
+  '621': 'Keystone',
+  '622': 'Keystone',
+  '623': 'Keystone',
+  '624': 'Keystone',
+  '625': 'Keystone',
+  '626': 'Keystone',
+  '627': 'Keystone',
+  '628': 'Keystone',
+  '629': 'Keystone',
+  '630': 'Keystone',
+  '631': 'Keystone',
+  '640': 'Keystone',
+  '641': 'Keystone',
+  '642': 'Keystone',
+  '643': 'Keystone',
+  '644': 'Keystone',
+  '645': 'Keystone',
+  '646': 'Keystone',
+  '647': 'Keystone',
+  '648': 'Keystone',
+  '649': 'Keystone',
+  '650': 'Keystone',
+  '651': 'Keystone',
+  '660': 'Keystone',
+  '661': 'Keystone',
+  '662': 'Keystone',
+  '663': 'Keystone',
   // Pacific Surfliner
-  '761': 'Pacific Surfliner', '762': 'Pacific Surfliner', '763': 'Pacific Surfliner',
-  '764': 'Pacific Surfliner', '765': 'Pacific Surfliner', '766': 'Pacific Surfliner',
-  '767': 'Pacific Surfliner', '768': 'Pacific Surfliner', '769': 'Pacific Surfliner',
-  '770': 'Pacific Surfliner', '771': 'Pacific Surfliner', '772': 'Pacific Surfliner',
-  '773': 'Pacific Surfliner', '774': 'Pacific Surfliner', '775': 'Pacific Surfliner',
-  '776': 'Pacific Surfliner', '777': 'Pacific Surfliner', '778': 'Pacific Surfliner',
-  '779': 'Pacific Surfliner', '780': 'Pacific Surfliner', '781': 'Pacific Surfliner',
-  '782': 'Pacific Surfliner', '783': 'Pacific Surfliner', '784': 'Pacific Surfliner',
-  '785': 'Pacific Surfliner', '786': 'Pacific Surfliner', '787': 'Pacific Surfliner',
-  '788': 'Pacific Surfliner', '789': 'Pacific Surfliner', '790': 'Pacific Surfliner',
-  '791': 'Pacific Surfliner', '792': 'Pacific Surfliner', '793': 'Pacific Surfliner',
-  '794': 'Pacific Surfliner', '795': 'Pacific Surfliner', '796': 'Pacific Surfliner',
+  '761': 'Pacific Surfliner',
+  '762': 'Pacific Surfliner',
+  '763': 'Pacific Surfliner',
+  '764': 'Pacific Surfliner',
+  '765': 'Pacific Surfliner',
+  '766': 'Pacific Surfliner',
+  '767': 'Pacific Surfliner',
+  '768': 'Pacific Surfliner',
+  '769': 'Pacific Surfliner',
+  '770': 'Pacific Surfliner',
+  '771': 'Pacific Surfliner',
+  '772': 'Pacific Surfliner',
+  '773': 'Pacific Surfliner',
+  '774': 'Pacific Surfliner',
+  '775': 'Pacific Surfliner',
+  '776': 'Pacific Surfliner',
+  '777': 'Pacific Surfliner',
+  '778': 'Pacific Surfliner',
+  '779': 'Pacific Surfliner',
+  '780': 'Pacific Surfliner',
+  '781': 'Pacific Surfliner',
+  '782': 'Pacific Surfliner',
+  '783': 'Pacific Surfliner',
+  '784': 'Pacific Surfliner',
+  '785': 'Pacific Surfliner',
+  '786': 'Pacific Surfliner',
+  '787': 'Pacific Surfliner',
+  '788': 'Pacific Surfliner',
+  '789': 'Pacific Surfliner',
+  '790': 'Pacific Surfliner',
+  '791': 'Pacific Surfliner',
+  '792': 'Pacific Surfliner',
+  '793': 'Pacific Surfliner',
+  '794': 'Pacific Surfliner',
+  '795': 'Pacific Surfliner',
+  '796': 'Pacific Surfliner',
   // Cascades
-  '500': 'Cascades', '501': 'Cascades', '502': 'Cascades', '503': 'Cascades',
-  '504': 'Cascades', '505': 'Cascades', '506': 'Cascades', '507': 'Cascades',
-  '508': 'Cascades', '509': 'Cascades', '510': 'Cascades', '511': 'Cascades',
-  '512': 'Cascades', '513': 'Cascades', '514': 'Cascades', '515': 'Cascades',
-  '516': 'Cascades', '517': 'Cascades', '518': 'Cascades', '519': 'Cascades',
+  '500': 'Cascades',
+  '501': 'Cascades',
+  '502': 'Cascades',
+  '503': 'Cascades',
+  '504': 'Cascades',
+  '505': 'Cascades',
+  '506': 'Cascades',
+  '507': 'Cascades',
+  '508': 'Cascades',
+  '509': 'Cascades',
+  '510': 'Cascades',
+  '511': 'Cascades',
+  '512': 'Cascades',
+  '513': 'Cascades',
+  '514': 'Cascades',
+  '515': 'Cascades',
+  '516': 'Cascades',
+  '517': 'Cascades',
+  '518': 'Cascades',
+  '519': 'Cascades',
   // Hiawatha
-  '329': 'Hiawatha', '330': 'Hiawatha', '331': 'Hiawatha', '332': 'Hiawatha',
-  '333': 'Hiawatha', '334': 'Hiawatha', '335': 'Hiawatha', '336': 'Hiawatha',
-  '337': 'Hiawatha', '338': 'Hiawatha', '339': 'Hiawatha', '340': 'Hiawatha',
-  '341': 'Hiawatha', '342': 'Hiawatha', '343': 'Hiawatha', '344': 'Hiawatha',
+  '329': 'Hiawatha',
+  '330': 'Hiawatha',
+  '331': 'Hiawatha',
+  '332': 'Hiawatha',
+  '333': 'Hiawatha',
+  '334': 'Hiawatha',
+  '335': 'Hiawatha',
+  '336': 'Hiawatha',
+  '337': 'Hiawatha',
+  '338': 'Hiawatha',
+  '339': 'Hiawatha',
+  '340': 'Hiawatha',
+  '341': 'Hiawatha',
+  '342': 'Hiawatha',
+  '343': 'Hiawatha',
+  '344': 'Hiawatha',
   // San Joaquins
-  '701': 'San Joaquins', '702': 'San Joaquins', '703': 'San Joaquins', '704': 'San Joaquins',
-  '705': 'San Joaquins', '706': 'San Joaquins', '707': 'San Joaquins', '708': 'San Joaquins',
-  '709': 'San Joaquins', '710': 'San Joaquins', '711': 'San Joaquins', '712': 'San Joaquins',
-  '713': 'San Joaquins', '714': 'San Joaquins', '715': 'San Joaquins', '716': 'San Joaquins',
-  '717': 'San Joaquins', '718': 'San Joaquins', '719': 'San Joaquins', '720': 'San Joaquins',
+  '701': 'San Joaquins',
+  '702': 'San Joaquins',
+  '703': 'San Joaquins',
+  '704': 'San Joaquins',
+  '705': 'San Joaquins',
+  '706': 'San Joaquins',
+  '707': 'San Joaquins',
+  '708': 'San Joaquins',
+  '709': 'San Joaquins',
+  '710': 'San Joaquins',
+  '711': 'San Joaquins',
+  '712': 'San Joaquins',
+  '713': 'San Joaquins',
+  '714': 'San Joaquins',
+  '715': 'San Joaquins',
+  '716': 'San Joaquins',
+  '717': 'San Joaquins',
+  '718': 'San Joaquins',
+  '719': 'San Joaquins',
+  '720': 'San Joaquins',
   // Capitol Corridor
-  '521': 'Capitol Corridor', '522': 'Capitol Corridor', '523': 'Capitol Corridor', '524': 'Capitol Corridor',
-  '525': 'Capitol Corridor', '526': 'Capitol Corridor', '527': 'Capitol Corridor', '528': 'Capitol Corridor',
-  '529': 'Capitol Corridor', '530': 'Capitol Corridor', '531': 'Capitol Corridor', '532': 'Capitol Corridor',
-  '533': 'Capitol Corridor', '534': 'Capitol Corridor', '535': 'Capitol Corridor', '536': 'Capitol Corridor',
-  '537': 'Capitol Corridor', '538': 'Capitol Corridor', '539': 'Capitol Corridor', '540': 'Capitol Corridor',
-  '541': 'Capitol Corridor', '542': 'Capitol Corridor', '543': 'Capitol Corridor', '544': 'Capitol Corridor',
-  '545': 'Capitol Corridor', '546': 'Capitol Corridor', '547': 'Capitol Corridor', '548': 'Capitol Corridor',
-  '549': 'Capitol Corridor', '550': 'Capitol Corridor', '551': 'Capitol Corridor', '552': 'Capitol Corridor',
+  '521': 'Capitol Corridor',
+  '522': 'Capitol Corridor',
+  '523': 'Capitol Corridor',
+  '524': 'Capitol Corridor',
+  '525': 'Capitol Corridor',
+  '526': 'Capitol Corridor',
+  '527': 'Capitol Corridor',
+  '528': 'Capitol Corridor',
+  '529': 'Capitol Corridor',
+  '530': 'Capitol Corridor',
+  '531': 'Capitol Corridor',
+  '532': 'Capitol Corridor',
+  '533': 'Capitol Corridor',
+  '534': 'Capitol Corridor',
+  '535': 'Capitol Corridor',
+  '536': 'Capitol Corridor',
+  '537': 'Capitol Corridor',
+  '538': 'Capitol Corridor',
+  '539': 'Capitol Corridor',
+  '540': 'Capitol Corridor',
+  '541': 'Capitol Corridor',
+  '542': 'Capitol Corridor',
+  '543': 'Capitol Corridor',
+  '544': 'Capitol Corridor',
+  '545': 'Capitol Corridor',
+  '546': 'Capitol Corridor',
+  '547': 'Capitol Corridor',
+  '548': 'Capitol Corridor',
+  '549': 'Capitol Corridor',
+  '550': 'Capitol Corridor',
+  '551': 'Capitol Corridor',
+  '552': 'Capitol Corridor',
   // Vermonter
-  '54': 'Vermonter', '55': 'Vermonter', '56': 'Vermonter', '57': 'Vermonter',
+  '54': 'Vermonter',
+  '55': 'Vermonter',
+  '56': 'Vermonter',
+  '57': 'Vermonter',
   // Ethan Allen Express
-  '290': 'Ethan Allen Express', '291': 'Ethan Allen Express', '292': 'Ethan Allen Express', '293': 'Ethan Allen Express',
+  '290': 'Ethan Allen Express',
+  '291': 'Ethan Allen Express',
+  '292': 'Ethan Allen Express',
+  '293': 'Ethan Allen Express',
   // Downeaster
-  '680': 'Downeaster', '681': 'Downeaster', '682': 'Downeaster', '683': 'Downeaster',
-  '684': 'Downeaster', '685': 'Downeaster', '686': 'Downeaster', '687': 'Downeaster',
-  '688': 'Downeaster', '689': 'Downeaster', '690': 'Downeaster', '691': 'Downeaster',
-  '692': 'Downeaster', '693': 'Downeaster', '694': 'Downeaster', '695': 'Downeaster',
+  '680': 'Downeaster',
+  '681': 'Downeaster',
+  '682': 'Downeaster',
+  '683': 'Downeaster',
+  '684': 'Downeaster',
+  '685': 'Downeaster',
+  '686': 'Downeaster',
+  '687': 'Downeaster',
+  '688': 'Downeaster',
+  '689': 'Downeaster',
+  '690': 'Downeaster',
+  '691': 'Downeaster',
+  '692': 'Downeaster',
+  '693': 'Downeaster',
+  '694': 'Downeaster',
+  '695': 'Downeaster',
   // Adirondack
-  '68': 'Adirondack', '69': 'Adirondack',
+  '68': 'Adirondack',
+  '69': 'Adirondack',
   // Maple Leaf
-  '63': 'Maple Leaf', '64': 'Maple Leaf',
+  '63': 'Maple Leaf',
+  '64': 'Maple Leaf',
   // Wolverines
-  '350': 'Wolverine', '351': 'Wolverine', '352': 'Wolverine', '353': 'Wolverine',
-  '354': 'Wolverine', '355': 'Wolverine', '364': 'Wolverine', '365': 'Wolverine',
+  '350': 'Wolverine',
+  '351': 'Wolverine',
+  '352': 'Wolverine',
+  '353': 'Wolverine',
+  '354': 'Wolverine',
+  '355': 'Wolverine',
+  '364': 'Wolverine',
+  '365': 'Wolverine',
   // Blue Water
-  '364': 'Blue Water', '365': 'Blue Water',
+  '364': 'Blue Water',
+  '365': 'Blue Water',
   // Pere Marquette
-  '370': 'Pere Marquette', '371': 'Pere Marquette',
+  '370': 'Pere Marquette',
+  '371': 'Pere Marquette',
   // Illini/Saluki
-  '390': 'Saluki', '391': 'Saluki', '392': 'Illini', '393': 'Illini',
+  '390': 'Saluki',
+  '391': 'Saluki',
+  '392': 'Illini',
+  '393': 'Illini',
   // Lincoln Service
-  '300': 'Lincoln Service', '301': 'Lincoln Service', '302': 'Lincoln Service', '303': 'Lincoln Service',
-  '304': 'Lincoln Service', '305': 'Lincoln Service', '306': 'Lincoln Service', '307': 'Lincoln Service',
-  '308': 'Lincoln Service', '309': 'Lincoln Service', '310': 'Lincoln Service', '311': 'Lincoln Service',
-  '312': 'Lincoln Service', '313': 'Lincoln Service', '314': 'Lincoln Service', '315': 'Lincoln Service',
+  '300': 'Lincoln Service',
+  '301': 'Lincoln Service',
+  '302': 'Lincoln Service',
+  '303': 'Lincoln Service',
+  '304': 'Lincoln Service',
+  '305': 'Lincoln Service',
+  '306': 'Lincoln Service',
+  '307': 'Lincoln Service',
+  '308': 'Lincoln Service',
+  '309': 'Lincoln Service',
+  '310': 'Lincoln Service',
+  '311': 'Lincoln Service',
+  '312': 'Lincoln Service',
+  '313': 'Lincoln Service',
+  '314': 'Lincoln Service',
+  '315': 'Lincoln Service',
   // Missouri River Runner
-  '311': 'Missouri River Runner', '313': 'Missouri River Runner', '314': 'Missouri River Runner', '316': 'Missouri River Runner',
+  '311': 'Missouri River Runner',
+  '313': 'Missouri River Runner',
+  '314': 'Missouri River Runner',
+  '316': 'Missouri River Runner',
   // Heartland Flyer
-  '821': 'Heartland Flyer', '822': 'Heartland Flyer',
+  '821': 'Heartland Flyer',
+  '822': 'Heartland Flyer',
 };
 
 /**
@@ -185,7 +396,11 @@ export function getRouteNameForTrainNumber(trainNumber: string): string | null {
  * Get display info for a train (route name and number formatted for display)
  * Examples: "Pennsylvanian 43", "Acela 2151", "Amtrak 171"
  */
-export function getTrainDisplayName(tripId: string): { routeName: string | null; trainNumber: string; displayName: string } {
+export function getTrainDisplayName(tripId: string): {
+  routeName: string | null;
+  trainNumber: string;
+  displayName: string;
+} {
   const trainNumber = extractTrainNumber(tripId);
 
   // First try the hardcoded mapping (covers named trains with friendly names)
@@ -202,9 +417,7 @@ export function getTrainDisplayName(tripId: string): { routeName: string | null;
     }
   }
 
-  const displayName = routeName
-    ? `${routeName} ${trainNumber}`
-    : `Amtrak ${trainNumber}`;
+  const displayName = routeName ? `${routeName} ${trainNumber}` : `Amtrak ${trainNumber}`;
 
   return { routeName, trainNumber, displayName };
 }
@@ -219,7 +432,7 @@ export class TrainAPIService {
       // For now, use the local GTFS parser
       return gtfsParser.search(query);
     } catch (error) {
-      console.error('Error searching:', error);
+      logger.error('Error searching:', error);
       return [];
     }
   }
@@ -231,7 +444,7 @@ export class TrainAPIService {
     try {
       return gtfsParser.getAllRoutes();
     } catch (error) {
-      console.error('Error fetching routes:', error);
+      logger.error('Error fetching routes:', error);
       return [];
     }
   }
@@ -243,7 +456,7 @@ export class TrainAPIService {
     try {
       return gtfsParser.getAllStops();
     } catch (error) {
-      console.error('Error fetching stops:', error);
+      logger.error('Error fetching stops:', error);
       return [];
     }
   }
@@ -300,11 +513,11 @@ export class TrainAPIService {
 
       return train;
     } catch (error) {
-      console.error('Error fetching train details:', error);
+      logger.error('Error fetching train details:', error);
       return null;
     }
   }
-  
+
   /**
    * Enrich a train object with real-time position and delay data
    */
@@ -312,7 +525,7 @@ export class TrainAPIService {
     try {
       const position = await RealtimeService.getPositionForTrip(train.tripId || train.trainNumber);
       const delay = await RealtimeService.getDelayForStop(train.tripId || train.trainNumber, train.fromCode);
-      
+
       train.realtime = {
         position: position ? { lat: position.latitude, lon: position.longitude } : undefined,
         delay: delay ?? undefined,
@@ -320,7 +533,7 @@ export class TrainAPIService {
         lastUpdated: position?.timestamp,
       };
     } catch (realtimeError) {
-      console.warn('Could not fetch real-time data:', realtimeError);
+      logger.warn('Could not fetch real-time data:', realtimeError);
     }
   }
 
@@ -330,12 +543,10 @@ export class TrainAPIService {
   static async getTrainsForStation(stopId: string): Promise<Train[]> {
     try {
       const tripIds = gtfsParser.getTripsForStop(stopId);
-      const trains = await Promise.all(
-        tripIds.map(tripId => this.getTrainDetails(tripId))
-      );
+      const trains = await Promise.all(tripIds.map(tripId => this.getTrainDetails(tripId)));
       return trains.filter((train): train is Train => train !== null);
     } catch (error) {
-      console.error('Error fetching trains for station:', error);
+      logger.error('Error fetching trains for station:', error);
       return [];
     }
   }
@@ -347,7 +558,7 @@ export class TrainAPIService {
     try {
       return gtfsParser.getStopTimesForTrip(tripId);
     } catch (error) {
-      console.error('Error fetching stop times:', error);
+      logger.error('Error fetching stop times:', error);
       return [];
     }
   }
@@ -362,7 +573,7 @@ export class TrainAPIService {
     await this.enrichWithRealtimeData(updatedTrain);
     return updatedTrain;
   }
-  
+
   /**
    * Get all trains currently active with real-time positions
    * Useful for displaying live trains on a map
@@ -371,11 +582,11 @@ export class TrainAPIService {
     try {
       const activeTrains = await RealtimeService.getAllActiveTrains();
       const trains: Train[] = [];
-      
+
       for (const { trainNumber, position } of activeTrains) {
         // Try to get train details from GTFS
         let train = await this.getTrainDetails(trainNumber);
-        
+
         // If not found in GTFS, create a minimal train object
         if (!train) {
           train = {
@@ -399,13 +610,13 @@ export class TrainAPIService {
             },
           };
         }
-        
+
         trains.push(train);
       }
-      
+
       return trains;
     } catch (error) {
-      console.error('Error fetching active trains:', error);
+      logger.error('Error fetching active trains:', error);
       return [];
     }
   }

@@ -19,26 +19,21 @@ import { COLORS, styles } from '../screens/styles';
 import type { Train } from '../types/train';
 import TimeDisplay from './ui/TimeDisplay';
 import { SlideUpModalContext } from './ui/slide-up-modal';
+import { parseTimeToDate } from '../utils/time-formatting';
+
+// Re-export for backwards compatibility
+export { parseTimeToDate };
 
 // First threshold - shows delete button
 const FIRST_THRESHOLD = -80;
 // Second threshold - triggers auto-delete on release
 const SECOND_THRESHOLD = -200;
 
-export function parseTimeToDate(timeStr: string, baseDate: Date): Date {
-  const [time, meridian] = timeStr.split(' ');
-  const [hStr, mStr] = time.split(':');
-  let hours = parseInt(hStr, 10);
-  const minutes = parseInt(mStr, 10);
-  const isPM = (meridian || '').toUpperCase() === 'PM';
-  if (isPM && hours !== 12) hours += 12;
-  if (!isPM && hours === 12) hours = 0;
-  const d = new Date(baseDate);
-  d.setHours(hours, minutes, 0, 0);
-  return d;
-}
-
-export function getCountdownForTrain(train: Train): { value: number; unit: 'DAYS' | 'HOURS' | 'MINUTES' | 'SECONDS'; past: boolean } {
+export function getCountdownForTrain(train: Train): {
+  value: number;
+  unit: 'DAYS' | 'HOURS' | 'MINUTES' | 'SECONDS';
+  past: boolean;
+} {
   if (train.daysAway && train.daysAway > 0) {
     return { value: Math.round(train.daysAway), unit: 'DAYS', past: false };
   }
@@ -95,7 +90,7 @@ function SwipeableTrainCard({ train, onPress, onDelete, isFirst, contentOpacity 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-15, 15])
     .failOffsetY([-10, 10])
-    .onUpdate((event) => {
+    .onUpdate(event => {
       if (isDeleting.value) return;
 
       // Only allow left swipe (negative values), no max limit
@@ -132,32 +127,26 @@ function SwipeableTrainCard({ train, onPress, onDelete, isFirst, contentOpacity 
       hasTriggeredSecondHaptic.value = false;
     });
 
-  const tapGesture = Gesture.Tap()
-    .onEnd(() => {
-      if (isDeleting.value) return;
+  const tapGesture = Gesture.Tap().onEnd(() => {
+    if (isDeleting.value) return;
 
-      if (translateX.value < -10) {
-        // If swiped, tap closes it
-        translateX.value = withSpring(0, {
-          damping: 50,
-          stiffness: 200,
-        });
-      } else {
-        runOnJS(onPress)();
-      }
-    });
+    if (translateX.value < -10) {
+      // If swiped, tap closes it
+      translateX.value = withSpring(0, {
+        damping: 50,
+        stiffness: 200,
+      });
+    } else {
+      runOnJS(onPress)();
+    }
+  });
 
   const composedGesture = Gesture.Race(panGesture, tapGesture);
 
   const cardAnimatedStyle = useAnimatedStyle(() => {
     const absX = Math.abs(translateX.value);
     // Fade from 1 to 0 as we go from FIRST_THRESHOLD to SECOND_THRESHOLD
-    const fadeProgress = interpolate(
-      absX,
-      [Math.abs(FIRST_THRESHOLD), Math.abs(SECOND_THRESHOLD)],
-      [1, 0],
-      'clamp'
-    );
+    const fadeProgress = interpolate(absX, [Math.abs(FIRST_THRESHOLD), Math.abs(SECOND_THRESHOLD)], [1, 0], 'clamp');
 
     return {
       transform: [{ translateX: translateX.value }],
@@ -201,12 +190,7 @@ function SwipeableTrainCard({ train, onPress, onDelete, isFirst, contentOpacity 
     }
     // When contentOpacity is 1 (half height), margin is default (Spacing.md)
     // When contentOpacity is 0 (collapsed), margin is 100
-    const marginBottom = interpolate(
-      contentOpacity.value,
-      [0, 1],
-      [100, Spacing.md],
-      'clamp'
-    );
+    const marginBottom = interpolate(contentOpacity.value, [0, 1], [100, Spacing.md], 'clamp');
     return {
       marginBottom,
     };
@@ -249,18 +233,16 @@ function SwipeableTrainCard({ train, onPress, onDelete, isFirst, contentOpacity 
 
           <View style={styles.flightCenter}>
             <View style={styles.flightHeader}>
-              <Image
-                source={require('../assets/images/amtrak.png')}
-                style={styles.amtrakLogo}
-                fadeDuration={0}
-              />
+              <Image source={require('../assets/images/amtrak.png')} style={styles.amtrakLogo} fadeDuration={0} />
               <Text style={[styles.trainNumber, { color: COLORS.secondary, fontWeight: '400' }]}>
                 {train.routeName ? train.routeName : train.operator} {train.trainNumber}
               </Text>
               <Text style={styles.flightDate}>{train.date}</Text>
             </View>
 
-            <Text style={[styles.route, { fontSize: 18 }]}>{train.from} to {train.to}</Text>
+            <Text style={[styles.route, { fontSize: 18 }]}>
+              {train.from} to {train.to}
+            </Text>
 
             <View style={styles.timeRow}>
               <View style={styles.timeInfo}>

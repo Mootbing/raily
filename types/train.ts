@@ -2,7 +2,6 @@
  * Core type definitions for the Tracky train tracking app
  */
 
-
 export interface Train {
   id: number;
   operator: string;
@@ -109,9 +108,9 @@ export interface FrequentlyUsedItem {
  * Contains only the essential IDs needed to reconstruct the full train data.
  */
 export interface SavedTrainRef {
-  tripId: string;           // Primary identifier for the train trip
-  fromCode?: string;        // Optional: user's boarding station (for segmented trips)
-  toCode?: string;          // Optional: user's destination station (for segmented trips)
-  travelDate?: number;      // Optional: travel date as timestamp (for date-specific trips)
-  savedAt: number;          // Timestamp when saved
+  tripId: string; // Primary identifier for the train trip
+  fromCode?: string; // Optional: user's boarding station (for segmented trips)
+  toCode?: string; // Optional: user's destination station (for segmented trips)
+  travelDate?: number; // Optional: travel date as timestamp (for date-specific trips)
+  savedAt: number; // Timestamp when saved
 }

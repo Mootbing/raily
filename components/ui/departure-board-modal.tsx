@@ -13,13 +13,7 @@ import {
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -29,6 +23,9 @@ import { TrainAPIService } from '../../services/api';
 import type { Stop, Train } from '../../types/train';
 import { SlideUpModalContext } from './slide-up-modal';
 import TimeDisplay from './TimeDisplay';
+import { parseTimeToMinutes } from '../../utils/time-formatting';
+import { getDaysAwayLabel, isSameDay, getStartOfDay, addDays } from '../../utils/date-helpers';
+import { logger } from '../../utils/logger';
 
 interface DepartureBoardModalProps {
   station: Stop;
@@ -41,41 +38,31 @@ interface DepartureBoardModalProps {
  * Format date for display (e.g., "Today", "Tomorrow", "Jan 17")
  */
 function formatDateDisplay(date: Date): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const targetDate = new Date(date);
-  targetDate.setHours(0, 0, 0, 0);
+  const today = getStartOfDay(new Date());
+  const tomorrow = addDays(today, 1);
+  const targetDate = getStartOfDay(date);
 
-  if (targetDate.getTime() === today.getTime()) {
+  if (isSameDay(targetDate, today)) {
     return 'Today';
-  } else if (targetDate.getTime() === tomorrow.getTime()) {
+  } else if (isSameDay(targetDate, tomorrow)) {
     return 'Tomorrow';
   } else {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 }
 
-/**
- * Parse time string (h:mm AM/PM) to minutes since midnight
- */
-function parseTimeToMinutes(timeStr: string): number {
-  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-  if (!match) return 0;
-  let hours = parseInt(match[1]);
-  const minutes = parseInt(match[2]);
-  const isPM = match[3].toUpperCase() === 'PM';
-  if (isPM && hours !== 12) hours += 12;
-  if (!isPM && hours === 12) hours = 0;
-  return hours * 60 + minutes;
-}
+// parseTimeToMinutes is now imported from utils/time-formatting
 
 /**
  * Check if a train is still upcoming based on the relevant time for the station
  * For terminating trains, check arrival time; for others, check departure/pass time
  */
-function isTrainUpcoming(train: Train, selectedDate: Date, stationId: string, filterMode: 'all' | 'beginning' | 'terminating'): boolean {
+function isTrainUpcoming(
+  train: Train,
+  selectedDate: Date,
+  stationId: string,
+  filterMode: 'all' | 'beginning' | 'terminating'
+): boolean {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const targetDate = new Date(selectedDate);
@@ -172,7 +159,7 @@ function SwipeableDepartureItem({ train, stationTime, stationId, onPress, onSave
   const panGesture = Gesture.Pan()
     .activeOffsetX([-15, 15])
     .failOffsetY([-10, 10])
-    .onUpdate((event) => {
+    .onUpdate(event => {
       if (isSaving.value) return;
 
       // Only allow left swipe (negative values)
@@ -203,20 +190,19 @@ function SwipeableDepartureItem({ train, stationTime, stationId, onPress, onSave
       hasTriggeredHaptic.value = false;
     });
 
-  const tapGesture = Gesture.Tap()
-    .onEnd(() => {
-      if (isSaving.value) return;
+  const tapGesture = Gesture.Tap().onEnd(() => {
+    if (isSaving.value) return;
 
-      if (translateX.value < -10) {
-        // If swiped, tap closes it
-        translateX.value = withSpring(0, {
-          damping: 50,
-          stiffness: 200,
-        });
-      } else {
-        runOnJS(onPress)();
-      }
-    });
+    if (translateX.value < -10) {
+      // If swiped, tap closes it
+      translateX.value = withSpring(0, {
+        damping: 50,
+        stiffness: 200,
+      });
+    } else {
+      runOnJS(onPress)();
+    }
+  });
 
   const composedGesture = Gesture.Race(panGesture, tapGesture);
 
@@ -270,7 +256,8 @@ function SwipeableDepartureItem({ train, stationTime, stationId, onPress, onSave
           <View style={styles.departureInfo}>
             <View style={styles.trainHeader}>
               <Text style={styles.trainNumber}>
-                {train.routeName || 'Amtrak'}{train.trainNumber ? ` ${train.trainNumber}` : ''}
+                {train.routeName || 'Amtrak'}
+                {train.trainNumber ? ` ${train.trainNumber}` : ''}
               </Text>
               {train.realtime?.status ? (
                 <View
@@ -282,9 +269,7 @@ function SwipeableDepartureItem({ train, stationTime, stationId, onPress, onSave
                   ]}
                 >
                   <Text style={styles.statusText}>
-                    {train.realtime.delay != null && train.realtime.delay > 0
-                      ? 'Delayed'
-                      : 'On Time'}
+                    {train.realtime.delay != null && train.realtime.delay > 0 ? 'Delayed' : 'On Time'}
                   </Text>
                 </View>
               ) : null}
@@ -354,7 +339,7 @@ export default function DepartureBoardModal({
         });
         setDepartures(deduped);
       } catch (error) {
-        console.error('Error fetching departures:', error);
+        logger.error('Error fetching departures:', error);
         setDepartures([]);
       } finally {
         setLoading(false);
@@ -366,7 +351,7 @@ export default function DepartureBoardModal({
 
   // Filter departures based on search, date, and filter mode
   const filteredDepartures = useMemo(() => {
-    const filtered = departures.filter((train) => {
+    const filtered = departures.filter(train => {
       // Filter by upcoming time for today (using relevant time based on filter mode)
       if (!isTrainUpcoming(train, selectedDate, station.stop_id, filterMode)) {
         return false;
@@ -391,7 +376,14 @@ export default function DepartureBoardModal({
         const matchesFromCode = train.fromCode.toLowerCase().includes(query);
         const matchesTrainNumber = train.trainNumber.toLowerCase().includes(query);
         const matchesRouteName = train.routeName?.toLowerCase().includes(query);
-        return matchesDestination || matchesToCode || matchesOrigin || matchesFromCode || matchesTrainNumber || matchesRouteName;
+        return (
+          matchesDestination ||
+          matchesToCode ||
+          matchesOrigin ||
+          matchesFromCode ||
+          matchesTrainNumber ||
+          matchesRouteName
+        );
       }
 
       return true;
@@ -422,7 +414,7 @@ export default function DepartureBoardModal({
 
   // Date navigation
   const navigateDate = useCallback((direction: 'prev' | 'next') => {
-    setSelectedDate((prev) => {
+    setSelectedDate(prev => {
       const newDate = new Date(prev);
       newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
       return newDate;
@@ -438,25 +430,22 @@ export default function DepartureBoardModal({
   }, [selectedDate]);
 
   // Handle date picker change
-  const handleDateChange = useCallback(
-    (event: DateTimePickerEvent, date?: Date) => {
-      // On Android, the picker closes automatically; on iOS, we need to handle it
-      if (Platform.OS === 'android') {
-        setShowDatePicker(false);
+  const handleDateChange = useCallback((event: DateTimePickerEvent, date?: Date) => {
+    // On Android, the picker closes automatically; on iOS, we need to handle it
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (event.type === 'set' && date) {
+      // Ensure date is not in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const newDate = new Date(date);
+      newDate.setHours(0, 0, 0, 0);
+      if (newDate.getTime() >= today.getTime()) {
+        setSelectedDate(date);
       }
-      if (event.type === 'set' && date) {
-        // Ensure date is not in the past
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const newDate = new Date(date);
-        newDate.setHours(0, 0, 0, 0);
-        if (newDate.getTime() >= today.getTime()) {
-          setSelectedDate(date);
-        }
-      }
-    },
-    []
-  );
+    }
+  }, []);
 
   // Close date picker on iOS
   const handleDatePickerDone = useCallback(() => {
@@ -469,29 +458,30 @@ export default function DepartureBoardModal({
       // For beginning/all: set origin to this station, keep original destination
       // Also update the departure/arrival times to match the station
       const stationTime = getStationDepartureTime(train, station.stop_id);
-      const updatedTrain: Train = filterMode === 'terminating'
-        ? {
-            ...train,
-            // Explicitly preserve the original origin
-            fromCode: train.fromCode,
-            from: train.from,
-            // Set destination to this station
-            toCode: station.stop_id,
-            to: station.stop_name,
-            arriveTime: stationTime.time,
-            arriveDayOffset: stationTime.dayOffset,
-          }
-        : {
-            ...train,
-            // Set origin to this station
-            fromCode: station.stop_id,
-            from: station.stop_name,
-            departTime: stationTime.time,
-            departDayOffset: stationTime.dayOffset,
-            // Explicitly preserve the original destination
-            toCode: train.toCode,
-            to: train.to,
-          };
+      const updatedTrain: Train =
+        filterMode === 'terminating'
+          ? {
+              ...train,
+              // Explicitly preserve the original origin
+              fromCode: train.fromCode,
+              from: train.from,
+              // Set destination to this station
+              toCode: station.stop_id,
+              to: station.stop_name,
+              arriveTime: stationTime.time,
+              arriveDayOffset: stationTime.dayOffset,
+            }
+          : {
+              ...train,
+              // Set origin to this station
+              fromCode: station.stop_id,
+              from: station.stop_name,
+              departTime: stationTime.time,
+              departDayOffset: stationTime.dayOffset,
+              // Explicitly preserve the original destination
+              toCode: train.toCode,
+              to: train.to,
+            };
       onTrainSelect(updatedTrain);
     },
     [station, onTrainSelect, filterMode]
@@ -518,168 +508,167 @@ export default function DepartureBoardModal({
           {/* Search Bar */}
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={18} color={AppColors.secondary} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search by destination or train..."
-                placeholderTextColor={AppColors.tertiary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={18} color={AppColors.secondary} />
-                </TouchableOpacity>
-              )}
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by destination or train..."
+              placeholderTextColor={AppColors.tertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color={AppColors.secondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Date Selector and Filter Row */}
+          <View style={styles.dateSelectorRow}>
+            {/* Date Navigation */}
+            <View style={styles.dateSelector}>
+              <TouchableOpacity
+                style={[styles.dateArrow, !canGoBack && styles.dateArrowDisabled]}
+                onPress={() => canGoBack && navigateDate('prev')}
+                disabled={!canGoBack}
+              >
+                <Ionicons name="chevron-back" size={20} color={canGoBack ? AppColors.primary : AppColors.tertiary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dateDisplay} onPress={() => setShowDatePicker(true)} activeOpacity={0.7}>
+                <Ionicons name="calendar-outline" size={16} color={AppColors.secondary} />
+                <Text style={styles.dateText}>{formatDateDisplay(selectedDate)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dateArrow} onPress={() => navigateDate('next')}>
+                <Ionicons name="chevron-forward" size={20} color={AppColors.primary} />
+              </TouchableOpacity>
             </View>
 
-            {/* Date Selector and Filter Row */}
-            <View style={styles.dateSelectorRow}>
-              {/* Date Navigation */}
-              <View style={styles.dateSelector}>
-                <TouchableOpacity
-                  style={[styles.dateArrow, !canGoBack && styles.dateArrowDisabled]}
-                  onPress={() => canGoBack && navigateDate('prev')}
-                  disabled={!canGoBack}
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={20}
-                    color={canGoBack ? AppColors.primary : AppColors.tertiary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dateDisplay}
-                  onPress={() => setShowDatePicker(true)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="calendar-outline" size={16} color={AppColors.secondary} />
-                  <Text style={styles.dateText}>{formatDateDisplay(selectedDate)}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.dateArrow} onPress={() => navigateDate('next')}>
-                  <Ionicons name="chevron-forward" size={20} color={AppColors.primary} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Filter Toggle - integrated pill style */}
-              <View style={styles.filterToggle}>
-                <TouchableOpacity
-                  style={[styles.filterButton, styles.filterButtonLeft, filterMode === 'all' && styles.filterButtonActive]}
-                  onPress={() => setFilterMode('all')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.filterText, filterMode === 'all' && styles.filterTextActive]}>All</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.filterButton, filterMode === 'beginning' && styles.filterButtonActive]}
-                  onPress={() => setFilterMode('beginning')}
-                  activeOpacity={0.7}
-                >
-                  <MaterialCommunityIcons
-                    name="arrow-top-right"
-                    size={18}
-                    color={filterMode === 'beginning' ? AppColors.primary : AppColors.tertiary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.filterButton, styles.filterButtonRight, filterMode === 'terminating' && styles.filterButtonActive]}
-                  onPress={() => setFilterMode('terminating')}
-                  activeOpacity={0.7}
-                >
-                  <MaterialCommunityIcons
-                    name="arrow-bottom-left"
-                    size={18}
-                    color={filterMode === 'terminating' ? AppColors.primary : AppColors.tertiary}
-                  />
-                </TouchableOpacity>
-              </View>
+            {/* Filter Toggle - integrated pill style */}
+            <View style={styles.filterToggle}>
+              <TouchableOpacity
+                style={[
+                  styles.filterButton,
+                  styles.filterButtonLeft,
+                  filterMode === 'all' && styles.filterButtonActive,
+                ]}
+                onPress={() => setFilterMode('all')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterText, filterMode === 'all' && styles.filterTextActive]}>All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterButton, filterMode === 'beginning' && styles.filterButtonActive]}
+                onPress={() => setFilterMode('beginning')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="arrow-top-right"
+                  size={18}
+                  color={filterMode === 'beginning' ? AppColors.primary : AppColors.tertiary}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.filterButton,
+                  styles.filterButtonRight,
+                  filterMode === 'terminating' && styles.filterButtonActive,
+                ]}
+                onPress={() => setFilterMode('terminating')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="arrow-bottom-left"
+                  size={18}
+                  color={filterMode === 'terminating' ? AppColors.primary : AppColors.tertiary}
+                />
+              </TouchableOpacity>
             </View>
-          </Animated.View>
-        </View>
+          </View>
+        </Animated.View>
+      </View>
 
-        <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]} pointerEvents={isCollapsed ? 'none' : 'auto'}>
-          {/* Date Picker */}
-          {showDatePicker && (
-            <View style={styles.datePickerContainer}>
-              <DateTimePicker
-                value={selectedDate}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                onChange={handleDateChange}
-                minimumDate={new Date()}
-                themeVariant="dark"
-                accentColor="#FFFFFF"
-              />
-              {Platform.OS === 'ios' && (
-                <TouchableOpacity
-                  style={styles.datePickerDoneButton}
-                  onPress={handleDatePickerDone}
-                >
-                  <Text style={styles.datePickerDoneText}>Done</Text>
-                </TouchableOpacity>
-              )}
+      <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]} pointerEvents={isCollapsed ? 'none' : 'auto'}>
+        {/* Date Picker */}
+        {showDatePicker && (
+          <View style={styles.datePickerContainer}>
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={handleDateChange}
+              minimumDate={new Date()}
+              themeVariant="dark"
+              accentColor="#FFFFFF"
+            />
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity style={styles.datePickerDoneButton} onPress={handleDatePickerDone}>
+                <Text style={styles.datePickerDoneText}>Done</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        <ScrollView
+          style={styles.scrollContent}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: isHalfHeight ? SCREEN_HEIGHT * 0.5 : 100 }}
+          showsVerticalScrollIndicator={true}
+          onScroll={e => {
+            const offsetY = e.nativeEvent.contentOffset.y;
+            if (scrollOffset) scrollOffset.value = offsetY;
+            setIsScrolled(offsetY > 0);
+          }}
+          scrollEventThrottle={16}
+          bounces={true}
+          nestedScrollEnabled={true}
+        >
+          {/* Departures List */}
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={AppColors.primary} />
+              <Text style={styles.loadingText}>Loading departures...</Text>
             </View>
-          )}
-
-          <ScrollView
-            style={styles.scrollContent}
-            contentContainerStyle={{ flexGrow: 1, paddingBottom: isHalfHeight ? SCREEN_HEIGHT * 0.5 : 100 }}
-            showsVerticalScrollIndicator={true}
-            onScroll={(e) => {
-              const offsetY = e.nativeEvent.contentOffset.y;
-              if (scrollOffset) scrollOffset.value = offsetY;
-              setIsScrolled(offsetY > 0);
-            }}
-            scrollEventThrottle={16}
-            bounces={true}
-            nestedScrollEnabled={true}
-          >
-            {/* Departures List */}
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={AppColors.primary} />
-                <Text style={styles.loadingText}>Loading departures...</Text>
-              </View>
-            ) : filteredDepartures.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="train-outline" size={48} color={AppColors.tertiary} />
-                <Text style={styles.emptyText}>
-                  {searchQuery
-                    ? 'No trains match your search'
-                    : filterMode === 'beginning'
-                      ? 'No trains found beginning at this station'
-                      : filterMode === 'terminating'
-                        ? 'No trains found terminating at this station'
-                        : 'No trains found for this station'}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.departuresList}>
-                <Text style={styles.sectionTitle}>
-                  {filterMode === 'terminating' ? 'Terminating' : filterMode === 'beginning' ? 'Beginning' : 'All Trains'} ({filteredDepartures.length})
-                </Text>
-                {filteredDepartures.map((train, index) => {
-                  if (!train || !train.departTime) return null;
-                  // Get the correct time for this station (not the origin's departure time)
-                  const stationTime = filterMode === 'terminating'
+          ) : filteredDepartures.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="train-outline" size={48} color={AppColors.tertiary} />
+              <Text style={styles.emptyText}>
+                {searchQuery
+                  ? 'No trains match your search'
+                  : filterMode === 'beginning'
+                    ? 'No trains found beginning at this station'
+                    : filterMode === 'terminating'
+                      ? 'No trains found terminating at this station'
+                      : 'No trains found for this station'}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.departuresList}>
+              <Text style={styles.sectionTitle}>
+                {filterMode === 'terminating' ? 'Terminating' : filterMode === 'beginning' ? 'Beginning' : 'All Trains'}{' '}
+                ({filteredDepartures.length})
+              </Text>
+              {filteredDepartures.map((train, index) => {
+                if (!train || !train.departTime) return null;
+                // Get the correct time for this station (not the origin's departure time)
+                const stationTime =
+                  filterMode === 'terminating'
                     ? { time: train.arriveTime, dayOffset: train.arriveDayOffset }
                     : getStationDepartureTime(train, station.stop_id);
-                  return (
-                    <SwipeableDepartureItem
-                      key={`${train.tripId || train.id}-${index}`}
-                      train={train}
-                      stationTime={stationTime}
-                      stationId={station.stop_id}
-                      onPress={() => handleTrainPress(train)}
-                      onSave={() => onSaveTrain?.(train)}
-                    />
-                  );
-                })}
-              </View>
-            )}
-          </ScrollView>
-        </Animated.View>
+                return (
+                  <SwipeableDepartureItem
+                    key={`${train.tripId || train.id}-${index}`}
+                    train={train}
+                    stationTime={stationTime}
+                    stationId={station.stop_id}
+                    onPress={() => handleTrainPress(train)}
+                    onSave={() => onSaveTrain?.(train)}
+                  />
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }

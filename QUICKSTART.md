@@ -8,6 +8,7 @@ npx tsx test-realtime.ts
 ```
 
 You should see:
+
 ```
 ✅ Found 159 active trains
 
@@ -63,7 +64,9 @@ console.log(RealtimeService.formatDelay(delay));
 ### Refresh a saved train
 
 ```typescript
-let train = { /* existing train object */ };
+let train = {
+  /* existing train object */
+};
 train = await TrainAPIService.refreshRealtimeData(train);
 // train.realtime.position now has latest location
 ```
@@ -86,12 +89,12 @@ train = await TrainAPIService.refreshRealtimeData(train);
 
 ## 🔧 Key Files
 
-| File | Purpose |
-|------|---------|
-| `services/realtime.ts` | GTFS-RT parser and cache |
-| `services/api.ts` | High-level API with enrichment |
-| `app/index.tsx` | Map UI with live markers |
-| `test-realtime.ts` | Integration test script |
+| File                   | Purpose                        |
+| ---------------------- | ------------------------------ |
+| `services/realtime.ts` | GTFS-RT parser and cache       |
+| `services/api.ts`      | High-level API with enrichment |
+| `app/index.tsx`        | Map UI with live markers       |
+| `test-realtime.ts`     | Integration test script        |
 
 ## 🎯 Common Use Cases
 
@@ -111,12 +114,10 @@ trains.forEach(train => {
 ```typescript
 useEffect(() => {
   const interval = setInterval(async () => {
-    const updated = await Promise.all(
-      savedTrains.map(t => TrainAPIService.refreshRealtimeData(t))
-    );
+    const updated = await Promise.all(savedTrains.map(t => TrainAPIService.refreshRealtimeData(t)));
     setSavedTrains(updated);
   }, 30000);
-  
+
   return () => clearInterval(interval);
 }, [savedTrains]);
 ```
@@ -127,17 +128,15 @@ useEffect(() => {
 const visibleTrains = trains.filter(train => {
   const pos = train.realtime?.position;
   if (!pos) return false;
-  
-  return (
-    pos.lat >= bounds.minLat && pos.lat <= bounds.maxLat &&
-    pos.lon >= bounds.minLon && pos.lon <= bounds.maxLon
-  );
+
+  return pos.lat >= bounds.minLat && pos.lat <= bounds.maxLat && pos.lon >= bounds.minLon && pos.lon <= bounds.maxLon;
 });
 ```
 
 ## 🐛 Troubleshooting
 
 **No trains showing?**
+
 ```bash
 # Check if endpoint is reachable
 curl -I https://asm-backend.transitdocs.com/gtfs/amtrak
@@ -147,12 +146,14 @@ RealtimeService.clearCache();
 ```
 
 **TypeScript errors?**
+
 ```bash
 # Check for compile errors
 npx tsc --noEmit
 ```
 
 **Need fresh data?**
+
 ```typescript
 // Force cache refresh
 RealtimeService.clearCache();

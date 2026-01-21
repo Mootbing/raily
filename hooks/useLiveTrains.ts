@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RealtimeService } from '../services/realtime';
 import { getRouteNameForTrainNumber } from '../services/api';
+import { logger } from '../utils/logger';
 
 export interface LiveTrain {
   trainNumber: string;
@@ -53,7 +54,7 @@ export function useLiveTrains(intervalMs: number = 15000, enabled: boolean = tru
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch live trains'));
-      console.error('Error fetching live trains:', err);
+      logger.error('Error fetching live trains:', err);
     } finally {
       setLoading(false);
     }
