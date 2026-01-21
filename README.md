@@ -64,7 +64,7 @@ Quick-access settings panel with:
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+ (recommended for full compatibility)
 - Expo CLI
 - iOS Simulator (Mac) or Android Emulator
 
@@ -73,7 +73,7 @@ Quick-access settings panel with:
 1. Install dependencies:
 
    ```bash
-   npm install
+   npm install --legacy-peer-deps
    ```
 
 2. Start the development server:
@@ -88,6 +88,76 @@ Quick-access settings panel with:
    - Scan QR code with Expo Go on your device
 
 Note: Web is not supported. This app targets iOS and Android only.
+
+## Development
+
+### Available Scripts
+
+```bash
+# Development
+npm start              # Start Expo development server
+npm run android        # Start on Android emulator
+npm run ios            # Start on iOS simulator
+
+# Code Quality
+npm run type-check     # Run TypeScript type checking
+npm run lint           # Run ESLint
+npm run format         # Format code with Prettier
+npm run format:check   # Check code formatting
+
+# Testing
+npm test               # Run all tests
+npm run test:watch     # Run tests in watch mode
+npm run test:coverage  # Run tests with coverage report
+
+# Validation
+npm run validate       # Run all quality checks (type-check + format + lint + test)
+```
+
+### Code Quality Standards
+
+This project maintains high code quality with:
+
+- **TypeScript**: Strict mode enabled for type safety
+- **ESLint**: Expo preset with custom rules
+- **Prettier**: Automated code formatting (120 line width, single quotes)
+- **Jest**: Unit and integration tests with 40% coverage threshold
+- **CI/CD**: Automated testing on all pull requests via GitHub Actions
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode during development
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+```
+
+**Test Coverage Status**: 47 passing tests across 4 suites
+
+- Time formatting utilities
+- Date helpers
+- Train number extraction
+- Logger utility
+
+### Pre-commit Quality Checks
+
+Before committing, run:
+
+```bash
+npm run validate
+```
+
+This ensures:
+
+- ✅ TypeScript compiles without errors
+- ✅ Code is properly formatted
+- ✅ ESLint rules pass
+- ✅ All tests pass
 
 ## Architecture
 
@@ -118,6 +188,19 @@ tracky/
 | `storage.ts`        | AsyncStorage persistence         |
 | `shape-loader.ts`   | Viewport-based route loading     |
 | `station-loader.ts` | Viewport-based station loading   |
+
+### Utilities
+
+| Utility                 | Purpose                                        |
+| ----------------------- | ---------------------------------------------- |
+| `time-formatting.ts`    | Time parsing and formatting (12/24-hour)       |
+| `date-helpers.ts`       | Date calculations and formatting               |
+| `train-helpers.ts`      | Train number extraction and normalization      |
+| `logger.ts`             | Centralized logging with environment awareness |
+| `gtfs-parser.ts`        | GTFS static data parsing                       |
+| `route-colors.ts`       | Route color schemes                            |
+| `station-clustering.ts` | Smart station marker clustering                |
+| `train-clustering.ts`   | Train marker clustering                        |
 
 ### State Management
 
@@ -158,13 +241,33 @@ On app startup:
 
 ## Tech Stack
 
+### Core Framework
+
 - **React Native** 0.81 with **React** 19
 - **Expo** 54 with Expo Router
-- **TypeScript** 5.9
+- **TypeScript** 5.9 (strict mode)
+
+### UI & Animation
+
 - **react-native-maps** for map rendering
-- **react-native-reanimated** for animations
+- **react-native-reanimated** 4.1 for 60fps animations
+- **react-native-gesture-handler** for gestures
+- **lucide-react-native** for icons
+
+### Data & APIs
+
 - **gtfs-realtime-bindings** for protobuf parsing
-- **AsyncStorage** for persistence
+- **AsyncStorage** for local persistence
+- **Transitdocs GTFS-RT API** for real-time train positions
+- **Amtrak GTFS** for schedule data
+
+### Development Tools
+
+- **Jest** 30 with React Native Testing Library
+- **ESLint** 9 with Expo config
+- **Prettier** 3.8 for code formatting
+- **Zod** 4.3 for runtime validation
+- **GitHub Actions** for CI/CD
 
 ## API Usage
 
@@ -197,9 +300,110 @@ const stations = await TrainAPIService.searchStations('Boston');
 const trips = await TrainAPIService.findTripsWithStops('BOS', 'NYP');
 ```
 
+## Code Quality & Testing
+
+### Testing Infrastructure
+
+This project uses Jest with React Native Testing Library for comprehensive testing:
+
+- **Unit Tests**: Utility functions, helpers, and services
+- **Integration Tests**: Hooks and context providers
+- **Component Tests**: UI components and screens
+
+**Coverage Thresholds**:
+
+- Statements: 40%
+- Branches: 30%
+- Functions: 40%
+- Lines: 40%
+
+### CI/CD Pipeline
+
+Every push and pull request runs:
+
+1. TypeScript type checking (`tsc --noEmit`)
+2. ESLint code quality checks
+3. Prettier formatting validation
+4. Full test suite with coverage reporting
+5. Coverage uploaded to Codecov with PR comments
+
+### Logging
+
+Centralized logging utility with environment-aware behavior:
+
+```typescript
+import { logger } from './utils/logger';
+
+// Debug and info logs only appear in development
+logger.debug('Detailed debug info', data);
+logger.info('Informational message');
+
+// Warnings and errors appear in all environments
+logger.warn('Warning message');
+logger.error('Error occurred', error);
+```
+
+**Features**:
+
+- Environment-aware (dev-only debug/info)
+- In-memory log storage (last 100 entries)
+- Export logs for debugging
+- Ready for crash reporting integration (Sentry, Bugsnag)
+
+### Data Validation
+
+Runtime validation with Zod schemas for external data:
+
+```typescript
+import { TrainPositionSchema, StopSchema } from './types/gtfs-schemas';
+
+// Validate GTFS-RT position data
+const position = TrainPositionSchema.safeParse(rawPosition);
+if (!position.success) {
+  logger.error('Invalid train position', position.error);
+  return null;
+}
+```
+
+**Available Schemas**:
+
+- `TrainPositionSchema` - GPS coordinates and bearing
+- `RealtimePositionSchema` - GTFS-RT vehicle positions
+- `RealtimeUpdateSchema` - Trip updates and delays
+- `StopSchema`, `RouteSchema`, `TripSchema` - GTFS static data
+
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+Contributions are welcome! Please follow these guidelines:
+
+1. **Code Quality**: Run `npm run validate` before committing
+2. **Tests**: Add tests for new features or bug fixes
+3. **Formatting**: Code is auto-formatted with Prettier
+4. **Type Safety**: Maintain strict TypeScript compliance
+5. **Pull Requests**: CI must pass before merging
+
+### Development Workflow
+
+```bash
+# 1. Create a feature branch
+git checkout -b feature/my-feature
+
+# 2. Make changes and write tests
+npm run test:watch
+
+# 3. Validate code quality
+npm run validate
+
+# 4. Format code
+npm run format
+
+# 5. Commit and push
+git add .
+git commit -m "feat: add my feature"
+git push origin feature/my-feature
+```
+
+The CI pipeline will automatically run all quality checks on your pull request.
 
 ## License
 
